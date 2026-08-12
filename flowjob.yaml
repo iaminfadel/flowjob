@@ -1,0 +1,25 @@
+scout:
+  search_queries: ["software engineer Egypt remote", "backend engineer Cairo"]
+  max_scrape_per_run: 30
+  
+analyst:
+  min_fit_score: 70
+  
+editor:
+  min_keyword_coverage: 75
+  
+applicator:
+  max_apps_per_day: 10
+  max_apps_per_hour: 1
+  dry_run: false
+  require_approval: true
+  
+llm:
+  llm_timeout_seconds: 60
+  max_retries: 3
+  
+data:
+  data_retention_days: 90
+  db_path: "flowjob.db"
+  output_dir: "output/"
+  browser_data_dir: "browser_data/"

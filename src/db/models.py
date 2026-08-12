@@ -1,0 +1,48 @@
+from enum import Enum
+from typing import Optional
+from sqlmodel import SQLModel, Field
+
+class JobState(str, Enum):
+    NEW = "NEW"
+    ANALYZED = "ANALYZED"
+    SKIPPED = "SKIPPED"
+    DRAFTED = "DRAFTED"
+    EDITED = "EDITED"
+    PENDING_APPROVAL = "PENDING_APPROVAL"
+    APPLIED = "APPLIED"
+    FAILED = "FAILED"
+    TAILOR_FAIL = "TAILOR_FAIL"
+    EDIT_FAIL = "EDIT_FAIL"
+    REJECTED = "REJECTED"
+
+class JobPosting(SQLModel, table=True):
+    id: str = Field(primary_key=True)  # sha256(url + title + company)[:12]
+    url: str
+    title: str
+    company: str
+    location: str
+    posted_date: str
+    jd_text: str
+    state: JobState = Field(default=JobState.NEW)
+
+class ApplicationRecord(SQLModel, table=True):
+    id: str = Field(primary_key=True)
+    company: str
+    role: str
+    job_url: str
+    state: JobState
+    date_first_seen: str
+    date_applied: Optional[str] = None
+    cv_path: Optional[str] = None
+    fit_score: Optional[int] = None
+    edit_score: Optional[int] = None
+    error_log: Optional[str] = None
+
+class ErrorRecord(SQLModel, table=True):
+    id: Optional[int] = Field(default=None, primary_key=True)
+    agent_name: str
+    error_type: str
+    stack_trace: str
+    job_id: str
+    timestamp: str
+    retry_count: int
