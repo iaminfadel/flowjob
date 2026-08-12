@@ -179,7 +179,7 @@ Each agent has its own `LocalAgentConfig`, system prompt, and custom tools. Agen
 - **Role**: Submit the application via browser automation. **Requires explicit human approval before executing.**
 - **Scope v1**: LinkedIn Easy Apply only.
 - **Tools**: `submit_easy_apply(job_url: str, cv_pdf_path: str, answers: dict) -> ApplicationResult`
-- **Human approval gate** (C001): Application is staged in `PENDING_APPROVAL` state. Orchestrator notifies user via CLI. Agent only executes after explicit confirmation.
+- **Human approval gate** (C001): Application is staged in `PENDING_APPROVAL` state. Orchestrator notifies user via OS notification (e.g. `notify-send`), then blocks on CLI input. Agent only executes after explicit confirmation.
 - **Known field map**: Hardcoded handler for common fields: name, email, phone, resume upload, cover letter.
 - **Unknown field handling**: On unrecognized question — **stop, screenshot, pause pipeline, notify user**. Never guess. Answer is stored in `form_signature_log` per company for future reuse.
 - **Navigation noise** (C002): Scroll JD 15–30s before applying, occasionally visit company page, randomized click paths, 2–5s micro-pauses.
@@ -331,6 +331,3 @@ flowjob/
 
 ---
 
-## 10. Open Questions / Next Decisions
-
-- **Notification mechanism for human approval gate**: terminal prompt vs. OS notification vs. simple web page.
