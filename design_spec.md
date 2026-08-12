@@ -320,7 +320,7 @@ flowjob/
 │   └── integration/
 │       └── fixtures/         # Cached JD HTML for regression tests
 ├── scripts/
-│   └── setup.sh
+│   └── validate_resume.py    # Master resume validation logic
 ├── master_resume.md           # The user's master resume (gitignored for PII)
 ├── flowjob.yaml
 ├── .env                       # gitignored
@@ -333,7 +333,5 @@ flowjob/
 
 ## 10. Open Questions / Next Decisions
 
-- **PDF validation tool**: `pdftotext` (poppler) vs. `pdfplumber` vs. PyMuPDF for the text extraction test (C013).
-- **Distribution**: PyPI package vs. Docker vs. clone-and-run. Affects `scripts/setup.sh` design.
 - **Database encryption**: At-rest encryption for `flowjob.db` — SQLCipher vs. filesystem-level encryption.
 - **Notification mechanism for human approval gate**: terminal prompt vs. OS notification vs. simple web page.
