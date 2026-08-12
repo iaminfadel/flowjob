@@ -333,5 +333,4 @@ flowjob/
 
 ## 10. Open Questions / Next Decisions
 
-- **Database encryption**: At-rest encryption for `flowjob.db` — SQLCipher vs. filesystem-level encryption.
 - **Notification mechanism for human approval gate**: terminal prompt vs. OS notification vs. simple web page.
