@@ -31,7 +31,7 @@ def test():
         ]
     }
     
-    from src.agents.tailor import generate_resume_pdf
+    from src.utils.document_generator import DocumentGenerator
     from src.utils.resume_parser import ResumeMetadata
 
     metadata = ResumeMetadata(
@@ -47,7 +47,8 @@ def test():
         education=[]
     )
     
-    pdf_path = generate_resume_pdf(tailored_resume, metadata, output_dir)
+    generator = DocumentGenerator()
+    pdf_path = generator.generate(tailored_resume, metadata, output_dir)
         
     print(f"Success! PDF generated at: {pdf_path}")
     print(f"HTML is at: {os.path.join(output_dir, 'resume.html')}")
