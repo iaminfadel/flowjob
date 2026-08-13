@@ -69,12 +69,7 @@ def test_editor_retry_max_retries(
     # Run 1: Editor fails, transitions to ANALYZED, metadata set
     run_pipeline(agents, dry_run=False)
     session.refresh(job)
-    # But process_analyzed_jobs already ran before process_drafted_jobs in the loop!
-    # So it stays ANALYZED until the NEXT run_pipeline!
-
     assert job.state == JobState.ANALYZED
-    # Wait, in run_pipeline, it goes: 
-    # process_new_jobs, process_analyzed_jobs, process_drafted_jobs.
     # If job starts DRAFTED, Editor runs -> fails -> ANALYZED.
     # But process_analyzed_jobs already ran before process_drafted_jobs in the loop!
     # So it stays ANALYZED until the NEXT run_pipeline!
