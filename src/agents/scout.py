@@ -2,7 +2,7 @@ import hashlib
 import time
 from urllib.parse import urlparse
 from playwright.sync_api import sync_playwright, TimeoutError as PlaywrightTimeout
-from src.db.models import JobPosting, JobState
+from src.db.models import Job, JobState
 from datetime import datetime
 
 def generate_id(url: str, title: str, company: str) -> str:
@@ -15,7 +15,7 @@ def clean_url(raw_url: str) -> str:
     parsed = urlparse(raw_url)
     return f"{parsed.scheme}://{parsed.netloc}{parsed.path}"
 
-def scrape_linkedin_jobs(search_url: str, max_jobs: int = 30, headless: bool = False, user_data_dir: str = "browser_data") -> list[JobPosting]:
+def scrape_linkedin_jobs(search_url: str, max_jobs: int = 30, headless: bool = False, user_data_dir: str = "browser_data") -> list[Job]:
     """Scrapes LinkedIn Easy Apply jobs using Playwright."""
     jobs = []
     
@@ -83,7 +83,7 @@ def scrape_linkedin_jobs(search_url: str, max_jobs: int = 30, headless: bool = F
                     
                 job_id = generate_id(url, title, company)
                 
-                job = JobPosting(
+                job = Job(
                     id=job_id,
                     url=url,
                     title=title,

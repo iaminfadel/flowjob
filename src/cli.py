@@ -82,7 +82,7 @@ def status(config: str = typer.Option("flowjob.yaml", help="Path to the configur
     from src.config import load_config
     from src.db.store import init_db, get_session
     from sqlmodel import select, func
-    from src.db.models import JobPosting, JobState
+    from src.db.models import Job, JobState
     
     try:
         conf = load_config(config)
@@ -93,7 +93,7 @@ def status(config: str = typer.Option("flowjob.yaml", help="Path to the configur
 
     with get_session(engine) as session:
         def count_state(state):
-            statement = select(func.count(JobPosting.id)).where(JobPosting.state == state)
+            statement = select(func.count(Job.id)).where(Job.state == state)
             return session.exec(statement).one()
 
         new_count = count_state(JobState.NEW)

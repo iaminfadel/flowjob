@@ -23,7 +23,7 @@ class JobState(str, Enum):
     EDIT_FAIL = "EDIT_FAIL"
     REJECTED = "REJECTED"
 
-class JobPosting(SQLModel, table=True):
+class Job(SQLModel, table=True):
     id: str = Field(primary_key=True)  # sha256(url + title + company)[:12]
     url: str
     title: str
@@ -33,19 +33,10 @@ class JobPosting(SQLModel, table=True):
     jd_text: str
     state: JobState = Field(default=JobState.NEW)
     tailor_metadata: dict = Field(default_factory=dict, sa_column=Column(JSON))
-
-class ApplicationRecord(SQLModel, table=True):
-    id: str = Field(primary_key=True)
-    company: str
-    role: str
-    job_url: str
-    state: JobState
-    date_first_seen: str
     date_applied: Optional[str] = None
     cv_path: Optional[str] = None
     fit_score: Optional[int] = None
     edit_score: Optional[int] = None
-    error_log: Optional[str] = None
 
 class ErrorRecord(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)

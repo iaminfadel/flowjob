@@ -2,7 +2,7 @@ import yaml
 import traceback
 from sqlmodel import select
 from src.db.store import init_db, get_session
-from src.db.models import JobPosting, JobState, ErrorRecord
+from src.db.models import Job, JobState, ErrorRecord
 from src.agents.analyst import AnalystAgent
 from src.agents.tailor import TailorAgent
 from src.agents.editor import EditorAgent
@@ -84,7 +84,7 @@ def process_retries(session):
     
     count = 0
     for err in errors:
-        job = session.get(JobPosting, err.job_id)
+        job = session.get(Job, err.job_id)
         if not job:
             continue
             
@@ -109,7 +109,7 @@ def process_new_jobs(session, config):
     analyst_agent: AgentRunner = AnalystAgent()
     min_fit_score = config.get("analyst", {}).get("min_fit_score", 70)
     
-    statement = select(JobPosting).where(JobPosting.state == JobState.NEW)
+    statement = select(Job).where(Job.state == JobState.NEW)
     new_jobs = session.exec(statement).all()
     
     print(f"Found {len(new_jobs)} NEW jobs.")
@@ -130,7 +130,7 @@ def process_new_jobs(session, config):
 
 def process_analyzed_jobs(session):
     tailor_agent: AgentRunner = TailorAgent()
-    statement = select(JobPosting).where(JobPosting.state == JobState.ANALYZED)
+    statement = select(Job).where(Job.state == JobState.ANALYZED)
     analyzed_jobs = session.exec(statement).all()
     
     print(f"Found {len(analyzed_jobs)} ANALYZED jobs.")
@@ -148,7 +148,7 @@ def process_analyzed_jobs(session):
 
 def process_drafted_jobs(session):
     editor_agent: AgentRunner = EditorAgent()
-    statement = select(JobPosting).where(JobPosting.state == JobState.DRAFTED)
+    statement = select(Job).where(Job.state == JobState.DRAFTED)
     drafted_jobs = session.exec(statement).all()
     
     print(f"Found {len(drafted_jobs)} DRAFTED jobs.")
@@ -180,7 +180,7 @@ def process_drafted_jobs(session):
             break
 
 def process_edited_jobs(session):
-    statement = select(JobPosting).where(JobPosting.state == JobState.EDITED)
+    statement = select(Job).where(Job.state == JobState.EDITED)
     edited_jobs = session.exec(statement).all()
     
     print(f"Found {len(edited_jobs)} EDITED jobs.")
@@ -192,7 +192,7 @@ def process_edited_jobs(session):
     session.commit()
 
 def process_pending_approval_jobs(session):
-    statement = select(JobPosting).where(JobPosting.state == JobState.PENDING_APPROVAL)
+    statement = select(Job).where(Job.state == JobState.PENDING_APPROVAL)
     pending_jobs = session.exec(statement).all()
     
     if pending_jobs:
