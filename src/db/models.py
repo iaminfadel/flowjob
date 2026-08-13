@@ -1,6 +1,13 @@
 from enum import Enum
-from typing import Optional
+from typing import Optional, Literal
 from sqlmodel import SQLModel, Field
+from pydantic import BaseModel
+
+class FitScore(BaseModel):
+    score: int
+    matching_skills: list[str]
+    missing_skills: list[str]
+    recommendation: Literal["apply", "skip", "review"]
 
 class JobState(str, Enum):
     NEW = "NEW"
