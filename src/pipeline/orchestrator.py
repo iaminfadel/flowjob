@@ -64,7 +64,8 @@ def process_analyzed_jobs(session):
         print(f"Tailoring resume for job: {job.title} at {job.company}")
         try:
             output_dir = os.path.join("data", "resumes", job.id)
-            pdf_path = tailor_agent.run(jd_text=job.jd_text, output_dir=output_dir, feedback=job.tailor_feedback)
+            feedback = job.tailor_metadata.get("feedback") if job.tailor_metadata else None
+            pdf_path = tailor_agent.run(jd_text=job.jd_text, output_dir=output_dir, feedback=feedback)
             print(f"Generated tailored resume PDF: {pdf_path}")
             job.state = JobState.DRAFTED
             session.add(job)
@@ -95,14 +96,14 @@ def process_drafted_jobs(session):
             print(f"Editor score: {edit_score.score} - Passed: {edit_score.passed}")
             
             if edit_score.passed:
-                job.state = JobState.PENDING_APPROVAL
-                job.tailor_feedback = None
-                print(f"Job {job.id} passed Editor. State -> PENDING_APPROVAL")
+                job.state = JobState.EDITED
+                job.tailor_metadata = {}
+                print(f"Job {job.id} passed Editor. State -> EDITED")
             else:
-                if job.tailor_retries < 1:
+                retries = job.tailor_metadata.get("retries", 0) if job.tailor_metadata else 0
+                if retries < 1:
                     print(f"Job {job.id} failed Editor. Retrying Tailor. Feedback: {edit_score.feedback}")
-                    job.tailor_retries += 1
-                    job.tailor_feedback = edit_score.feedback
+                    job.tailor_metadata = {"retries": retries + 1, "feedback": edit_score.feedback}
                     job.state = JobState.ANALYZED  # Send back to Tailor
                 else:
                     print(f"Job {job.id} failed Editor. Max retries reached. State -> EDIT_FAIL")
@@ -115,6 +116,18 @@ def process_drafted_jobs(session):
             session.rollback()
             log_job_error(session, "EditorAgent", e, job.id)
             session.commit()
+
+def process_edited_jobs(session):
+    statement = select(JobPosting).where(JobPosting.state == JobState.EDITED)
+    edited_jobs = session.exec(statement).all()
+    
+    print(f"Found {len(edited_jobs)} EDITED jobs.")
+    
+    for job in edited_jobs:
+        job.state = JobState.PENDING_APPROVAL
+        print(f"Job {job.id} moved to PENDING_APPROVAL.")
+        session.add(job)
+    session.commit()
 
 def run_pipeline(url: str = None, dry_run: bool = False):
     print(f"Pipeline started with url={url} and dry_run={dry_run}")
@@ -129,3 +142,4 @@ def run_pipeline(url: str = None, dry_run: bool = False):
         process_new_jobs(session, config)
         process_analyzed_jobs(session)
         process_drafted_jobs(session)
+        process_edited_jobs(session)

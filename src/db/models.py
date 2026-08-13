@@ -1,6 +1,7 @@
 from enum import Enum
 from typing import Optional, Literal
-from sqlmodel import SQLModel, Field
+from sqlmodel import SQLModel, Field, Column
+from sqlalchemy import JSON
 from pydantic import BaseModel
 
 class FitScore(BaseModel):
@@ -31,8 +32,7 @@ class JobPosting(SQLModel, table=True):
     posted_date: str
     jd_text: str
     state: JobState = Field(default=JobState.NEW)
-    tailor_retries: int = Field(default=0)
-    tailor_feedback: Optional[str] = None
+    tailor_metadata: dict = Field(default_factory=dict, sa_column=Column(JSON))
 
 class ApplicationRecord(SQLModel, table=True):
     id: str = Field(primary_key=True)
