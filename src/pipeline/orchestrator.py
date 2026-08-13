@@ -133,6 +133,13 @@ def process_analyzed_jobs(session, tailor_agent):
     
     print(f"Found {len(analyzed_jobs)} ANALYZED jobs.")
     
+    from src.utils.document_generator import DocumentGenerator
+    from src.utils.resume_parser import parse_master_resume
+    
+    if analyzed_jobs:
+        master_metadata, _ = parse_master_resume("master_resume.md")
+        doc_generator = DocumentGenerator()
+    
     for job in analyzed_jobs:
         print(f"Tailoring resume for job: {job.title} at {job.company}")
         def _step(j):
@@ -141,11 +148,7 @@ def process_analyzed_jobs(session, tailor_agent):
             
             tailored_resume = tailor_agent.run(jd_text=j.jd_text, feedback=feedback)
             
-            from src.utils.document_generator import DocumentGenerator
-            from src.utils.resume_parser import parse_master_resume
-            metadata, _ = parse_master_resume("master_resume.md")
-            generator = DocumentGenerator()
-            pdf_path = generator.generate(tailored_resume, metadata, output_dir)
+            pdf_path = doc_generator.generate(tailored_resume, master_metadata, output_dir)
             
             print(f"Generated tailored resume PDF: {pdf_path}")
             j.cv_path = pdf_path

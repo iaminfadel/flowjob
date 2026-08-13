@@ -1,56 +1,70 @@
 import pytest
+from sqlmodel import Session, SQLModel, create_engine
 from unittest.mock import patch, MagicMock
 from src.db.models import Job, JobState
-from src.pipeline.orchestrator import process_analyzed_jobs, process_drafted_jobs
+from src.pipeline.orchestrator import run_pipeline
 
-@patch("src.pipeline.orchestrator.TailorAgent")
-@patch("src.pipeline.orchestrator.EditorAgent")
+class FakeAgent:
+    def __init__(self, name):
+        self.name = name
+
+    def run(self, *args, **kwargs):
+        if self.name == "analyst":
+            class FitScore:
+                score = 80
+                recommendation = "apply"
+            return FitScore()
+        elif self.name == "tailor":
+            return {"basics": {"name": "Test"}}
+        elif self.name == "editor":
+            class EditScore:
+                passed = True
+                score = 95
+                feedback = []
+            return EditScore()
+        elif self.name == "applicator":
+            return True
+
+@pytest.fixture
+def session():
+    engine = create_engine("sqlite:///:memory:")
+    SQLModel.metadata.create_all(engine)
+    with Session(engine) as session:
+        yield session
+
+@patch("src.pipeline.orchestrator.prompt_user_approval", return_value=True)
+@patch("src.pipeline.orchestrator.init_db")
+@patch("src.pipeline.orchestrator.get_session")
+@patch("src.tools.browser.check_session_health", return_value=True)
+@patch("src.pipeline.orchestrator.yaml.safe_load")
+@patch("builtins.open")
+@patch("os.path.exists", return_value=True)
 @patch("src.utils.document_generator.DocumentGenerator")
 @patch("src.utils.resume_parser.parse_master_resume")
-def test_tailor_docgen_editor_chain(mock_parse_master, mock_docgen_class, mock_editor_class, mock_tailor_class):
-    # Setup mocks
-    mock_tailor = MagicMock()
-    mock_tailor.run.return_value = {"basics": {"name": "Test"}}
-    mock_tailor_class.return_value = mock_tailor
-
+def test_full_pipeline_sequence(
+    mock_parse, mock_docgen, mock_exists, mock_open, mock_yaml, mock_check, mock_get_session, mock_init_db, mock_prompt, session
+):
+    mock_yaml.return_value = {"analyst": {"min_fit_score": 70}, "data": {"db_path": "memory"}}
+    mock_get_session.return_value.__enter__.return_value = session
     mock_metadata = MagicMock()
-    mock_parse_master.return_value = (mock_metadata, "")
+    mock_parse.return_value = (mock_metadata, "")
+    
+    mock_generator = MagicMock()
+    mock_generator.generate.return_value = "fake_path.pdf"
+    mock_docgen.return_value = mock_generator
 
-    mock_docgen = MagicMock()
-    mock_docgen.generate.return_value = "fake_dir/resume.pdf"
-    mock_docgen_class.return_value = mock_docgen
+    job = Job(id="1", title="SE", company="Co", url="http", location="Remote", posted_date="today", jd_text="test jd", state=JobState.NEW)
+    session.add(job)
+    session.commit()
 
-    mock_editor = MagicMock()
-    mock_editor_score = MagicMock()
-    mock_editor_score.passed = True
-    mock_editor_score.score = 95
-    mock_editor.run.return_value = mock_editor_score
-    mock_editor_class.return_value = mock_editor
+    agents = {
+        "analyst": FakeAgent("analyst"),
+        "tailor": FakeAgent("tailor"),
+        "editor": FakeAgent("editor"),
+        "applicator": FakeAgent("applicator")
+    }
 
-    # Mock DB session and Job
-    mock_session = MagicMock()
-    
-    # 1. Test Tailor -> DocumentGenerator
-    job = Job(id="job123", url="http", title="T", company="C", state=JobState.ANALYZED, jd_text="JD")
-    mock_session.exec.return_value.all.return_value = [job]
-    
-    process_analyzed_jobs(mock_session)
-    
-    mock_tailor.run.assert_called_once()
-    mock_docgen.generate.assert_called_once_with({"basics": {"name": "Test"}}, mock_metadata, "data/resumes/job123")
-    assert job.state == JobState.DRAFTED
-    assert job.cv_path == "fake_dir/resume.pdf"
-    
-    # 2. Test Editor
-    job.state = JobState.DRAFTED
-    mock_session.exec.return_value.all.return_value = [job]
-    
-    with patch("os.path.exists", return_value=True):
-        process_drafted_jobs(mock_session)
-        
-    mock_editor.run.assert_called_once()
-    # Editor uses the cv_path now or does it hardcode?
-    # Wait, in orchestrator it currently hardcodes: pdf_path = os.path.join("data", "resumes", j.id, "resume.pdf")
-    # I should check process_drafted_jobs to ensure it uses cv_path.
-    assert job.state == JobState.EDITED
+    run_pipeline(agents, dry_run=False)
 
+    session.refresh(job)
+    assert job.state == JobState.APPLIED
