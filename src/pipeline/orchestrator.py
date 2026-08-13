@@ -105,8 +105,7 @@ def process_retries(session):
         session.commit()
         print(f"Retrying {count} transient errors...")
 
-def process_new_jobs(session, config):
-    analyst_agent: AgentRunner = AnalystAgent()
+def process_new_jobs(session, config, analyst_agent):
     min_fit_score = config.get("analyst", {}).get("min_fit_score", 70)
     
     statement = select(Job).where(Job.state == JobState.NEW)
@@ -128,8 +127,7 @@ def process_new_jobs(session, config):
         if not run_agent_step(session, "AnalystAgent", job, JobState.NEW, _step):
             break
 
-def process_analyzed_jobs(session):
-    tailor_agent: AgentRunner = TailorAgent()
+def process_analyzed_jobs(session, tailor_agent):
     statement = select(Job).where(Job.state == JobState.ANALYZED)
     analyzed_jobs = session.exec(statement).all()
     
@@ -140,14 +138,22 @@ def process_analyzed_jobs(session):
         def _step(j):
             output_dir = os.path.join("data", "resumes", j.id)
             feedback = j.tailor_metadata.get("feedback") if j.tailor_metadata else None
-            pdf_path = tailor_agent.run(jd_text=j.jd_text, output_dir=output_dir, feedback=feedback)
+            
+            tailored_resume = tailor_agent.run(jd_text=j.jd_text, feedback=feedback)
+            
+            from src.utils.document_generator import DocumentGenerator
+            from src.utils.resume_parser import parse_master_resume
+            metadata, _ = parse_master_resume("master_resume.md")
+            generator = DocumentGenerator()
+            pdf_path = generator.generate(tailored_resume, metadata, output_dir)
+            
             print(f"Generated tailored resume PDF: {pdf_path}")
+            j.cv_path = pdf_path
             j.state = JobState.DRAFTED
         if not run_agent_step(session, "TailorAgent", job, JobState.TAILOR_FAIL, _step):
             break
 
-def process_drafted_jobs(session):
-    editor_agent: AgentRunner = EditorAgent()
+def process_drafted_jobs(session, editor_agent):
     statement = select(Job).where(Job.state == JobState.DRAFTED)
     drafted_jobs = session.exec(statement).all()
     
@@ -156,7 +162,7 @@ def process_drafted_jobs(session):
     for job in drafted_jobs:
         print(f"Editing resume for job: {job.title} at {job.company}")
         def _step(j):
-            pdf_path = os.path.join("data", "resumes", j.id, "resume.pdf")
+            pdf_path = j.cv_path if j.cv_path else os.path.join("data", "resumes", j.id, "resume.pdf")
             if not os.path.exists(pdf_path):
                 raise FileNotFoundError(f"PDF not found at {pdf_path}")
                 
@@ -191,13 +197,12 @@ def process_edited_jobs(session):
         session.add(job)
     session.commit()
 
-def process_pending_approval_jobs(session):
+def process_pending_approval_jobs(session, applicator_agent):
     statement = select(Job).where(Job.state == JobState.PENDING_APPROVAL)
     pending_jobs = session.exec(statement).all()
     
     if pending_jobs:
         print(f"Found {len(pending_jobs)} PENDING_APPROVAL jobs.")
-        applicator_agent: AgentRunner = ApplicatorAgent()
         
     for job in pending_jobs:
         def _step(j):
@@ -215,7 +220,7 @@ def process_pending_approval_jobs(session):
         if not run_agent_step(session, "ApplicatorAgent", job, JobState.FAILED, _step):
             break
 
-def run_pipeline(url: str = None, dry_run: bool = False):
+def run_pipeline(agents: dict, url: str = None, dry_run: bool = False):
     print(f"Pipeline started with url={url} and dry_run={dry_run}")
     
     from src.tools.browser import check_session_health
@@ -231,13 +236,14 @@ def run_pipeline(url: str = None, dry_run: bool = False):
     
     with get_session(engine) as session:
         process_retries(session)
-        process_new_jobs(session, config)
-        process_analyzed_jobs(session)
-        process_drafted_jobs(session)
+        process_new_jobs(session, config, agents["analyst"])
+        process_analyzed_jobs(session, agents["tailor"])
+        process_drafted_jobs(session, agents["editor"])
         process_edited_jobs(session)
-        process_pending_approval_jobs(session)
-
+        
         if not dry_run:
+            process_pending_approval_jobs(session, agents["applicator"])
+            
             from src.db.models import PipelineRun
             run_record = PipelineRun(timestamp=datetime.now().isoformat(), success=True)
             session.add(run_record)
