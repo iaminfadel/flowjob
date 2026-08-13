@@ -46,15 +46,13 @@ def parse_master_resume(path: str = "master_resume.md") -> tuple[ResumeMetadata,
 
 class SafeResumeData(BaseModel):
     skills: dict[str, list[str]]
-    preferences: dict
     experience: str
 
 def get_safe_resume_data(path: str = "master_resume.md") -> SafeResumeData:
-    """Extract skills taxonomy, preferences, and experience bullets without PII."""
+    """Extract skills taxonomy and experience bullets without PII."""
     metadata, content = parse_master_resume(path)
     
     return SafeResumeData(
         skills=metadata.skills,
-        preferences=metadata.preferences,
         experience=content
     )

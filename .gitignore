@@ -16,3 +16,6 @@ browser_data/
 
 # Flowjob specific
 output/
+test_output/
+.scratch/
+diff.txt

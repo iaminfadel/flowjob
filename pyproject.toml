@@ -10,6 +10,9 @@ dependencies = [
     "pyyaml>=6.0.3",
     "sqlmodel>=0.0.39",
     "typer>=0.27.1",
+    "jinja2>=3.1.4",
+    "pymupdf>=1.24.9",
+    "google-genai>=1.2.0",
 ]
 
 [project.scripts]
