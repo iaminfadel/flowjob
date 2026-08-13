@@ -1,12 +1,16 @@
 import os
-from src.utils.document_generator import DocumentGenerator
+from src.utils.document_generator import PlaywrightDocumentGenerator
+from src.utils.resume_parser import ResumeMetadata
 
 class MockMetadata:
     name = "Test User"
     email = "test@example.com"
 
 def test_document_generator_integration(tmp_path):
-    generator = DocumentGenerator(template_dir="src/utils")
+    output_dir = str(tmp_path)
+    
+    # Use the real template directory
+    generator = PlaywrightDocumentGenerator(template_dir="src/utils")
     resume_data = {
         "basics": {
             "name": "Test User",

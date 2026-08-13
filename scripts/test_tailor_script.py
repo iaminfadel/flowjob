@@ -31,7 +31,7 @@ def test():
         ]
     }
     
-    from src.utils.document_generator import DocumentGenerator
+    from src.utils.document_generator import PlaywrightDocumentGenerator
     from src.utils.resume_parser import ResumeMetadata
 
     metadata = ResumeMetadata(
@@ -47,7 +47,7 @@ def test():
         education=[]
     )
     
-    generator = DocumentGenerator()
+    generator = PlaywrightDocumentGenerator()
     pdf_path = generator.generate(tailored_resume, metadata, output_dir)
         
     print(f"Success! PDF generated at: {pdf_path}")

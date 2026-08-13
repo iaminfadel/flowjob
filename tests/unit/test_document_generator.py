@@ -1,13 +1,13 @@
 import os
 from unittest.mock import patch, MagicMock
-from src.utils.document_generator import DocumentGenerator
+from src.utils.document_generator import PlaywrightDocumentGenerator
 
 class MockMetadata:
     name = "Test User"
     email = "test@example.com"
 
 def test_html_rendering_only(tmp_path):
-    generator = DocumentGenerator(template_dir="src/utils")
+    generator = PlaywrightDocumentGenerator(template_dir="src/utils")
     resume_data = {
         "basics": {
             "name": "Test User",

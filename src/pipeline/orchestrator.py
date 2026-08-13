@@ -127,18 +127,19 @@ def process_new_jobs(session, config, analyst_agent):
         if not run_agent_step(session, "AnalystAgent", job, JobState.NEW, _step):
             break
 
-def process_analyzed_jobs(session, tailor_agent):
+def process_analyzed_jobs(session, tailor_agent, doc_generator=None):
     statement = select(Job).where(Job.state == JobState.ANALYZED)
     analyzed_jobs = session.exec(statement).all()
     
     print(f"Found {len(analyzed_jobs)} ANALYZED jobs.")
     
-    from src.utils.document_generator import DocumentGenerator
+    from src.utils.document_generator import PlaywrightDocumentGenerator
     from src.utils.resume_parser import parse_master_resume
     
     if analyzed_jobs:
         master_metadata, _ = parse_master_resume("master_resume.md")
-        doc_generator = DocumentGenerator()
+        if doc_generator is None:
+            doc_generator = PlaywrightDocumentGenerator()
     
     for job in analyzed_jobs:
         print(f"Tailoring resume for job: {job.title} at {job.company}")
@@ -223,7 +224,7 @@ def process_pending_approval_jobs(session, applicator_agent):
         if not run_agent_step(session, "ApplicatorAgent", job, JobState.FAILED, _step):
             break
 
-def run_pipeline(agents: dict, url: str = None, dry_run: bool = False):
+def run_pipeline(agents: dict, url: str = None, dry_run: bool = False, doc_generator=None):
     print(f"Pipeline started with url={url} and dry_run={dry_run}")
     
     from src.tools.browser import check_session_health
@@ -240,7 +241,7 @@ def run_pipeline(agents: dict, url: str = None, dry_run: bool = False):
     with get_session(engine) as session:
         process_retries(session)
         process_new_jobs(session, config, agents["analyst"])
-        process_analyzed_jobs(session, agents["tailor"])
+        process_analyzed_jobs(session, agents["tailor"], doc_generator)
         process_drafted_jobs(session, agents["editor"])
         process_edited_jobs(session)
         

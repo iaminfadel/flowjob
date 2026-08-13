@@ -5,7 +5,20 @@ import fitz  # PyMuPDF
 from jinja2 import Environment, FileSystemLoader
 from playwright.sync_api import sync_playwright
 
-class DocumentGenerator:
+import os
+import json
+from pathlib import Path
+from abc import ABC, abstractmethod
+import fitz  # PyMuPDF
+from jinja2 import Environment, FileSystemLoader
+from playwright.sync_api import sync_playwright
+
+class DocumentGenerator(ABC):
+    @abstractmethod
+    def generate(self, resume_data: dict, metadata, output_dir: str = "output") -> str:
+        pass
+
+class PlaywrightDocumentGenerator(DocumentGenerator):
     def __init__(self, template_dir=None):
         if template_dir is None:
             self.template_dir = os.path.dirname(__file__)
@@ -53,3 +66,18 @@ class DocumentGenerator:
             raise ValueError(f"Generated PDF at {pdf_path} failed ATS validation: contact info not found in extracted text.")
             
         return pdf_path
+
+class InMemoryDocumentGenerator(DocumentGenerator):
+    def generate(self, resume_data: dict, metadata, output_dir: str = "output") -> str:
+        """Creates fake output files without Playwright for testing."""
+        os.makedirs(output_dir, exist_ok=True)
+        json_path = os.path.join(output_dir, "resume.json")
+        with open(json_path, "w", encoding="utf-8") as f:
+            json.dump(resume_data, f, indent=2)
+            
+        pdf_path = os.path.join(output_dir, "resume.pdf")
+        with open(pdf_path, "w") as f:
+            f.write("FAKE PDF CONTENT")
+            
+        return pdf_path
+

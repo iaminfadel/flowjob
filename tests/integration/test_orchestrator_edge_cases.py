@@ -41,7 +41,7 @@ def session():
 @patch("src.pipeline.orchestrator.yaml.safe_load")
 @patch("builtins.open")
 @patch("os.path.exists", return_value=True)
-@patch("src.utils.document_generator.DocumentGenerator")
+@patch("src.utils.document_generator.PlaywrightDocumentGenerator")
 @patch("src.utils.resume_parser.parse_master_resume")
 def test_editor_retry_max_retries(
     mock_parse, mock_docgen, mock_exists, mock_open, mock_yaml, mock_check, mock_get_session, mock_init_db, session
