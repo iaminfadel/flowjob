@@ -1,33 +1,16 @@
 import os
 from pydantic import BaseModel, Field
 from google import genai
-from google.genai import types
-from src.agents.runner import AgentRunner
 from src.utils.resume_parser import get_safe_resume_data
 from src.utils.pdf_utils import extract_text_from_pdf
+from src.agents.structured_llm import StructuredLLMAgent
 
 class EditorScore(BaseModel):
     score: int = Field(description="Score from 0 to 100 based on keyword coverage and formatting.")
     passed: bool = Field(description="True if the resume passes the QA, False otherwise. Should be True if score >= 80.")
     feedback: str = Field(description="Actionable feedback for the Tailor Agent if it failed, else empty string.")
 
-class EditorAgent(AgentRunner):
-    def __init__(self, model_name: str = "gemini-2.5-pro"):
-        self.model_name = model_name
-        self.client = genai.Client(api_key=os.environ.get("GEMINI_API_KEY"))
-
-    def run(self, jd_text: str, pdf_path: str, resume_path: str = "master_resume.md") -> EditorScore:
-        """
-        Audits the extracted text from the Tailor's PDF against the JD and safe master resume.
-        """
-        # 1. Extract text from the PDF
-        extracted_text = extract_text_from_pdf(pdf_path)
-        
-        # 2. Get safe data to verify no hallucinations
-        safe_resume = get_safe_resume_data(resume_path)
-        
-        # 3. Prompt Gemini
-        prompt = f"""
+EDITOR_PROMPT_TEMPLATE = """
 You are an expert QA Editor for technical resumes. 
 Your job is to audit the tailored resume against the Job Description and the candidate's original resume data.
 
@@ -35,7 +18,7 @@ Job Description:
 {jd_text}
 
 Candidate's Original Safe Resume Data:
-{safe_resume.model_dump_json(indent=2)}
+{safe_resume_json}
 
 Extracted Text from Tailored Resume PDF:
 {extracted_text}
@@ -47,15 +30,19 @@ Tasks:
 
 Score the resume from 0 to 100. If the score is below 80, set passed=False and provide specific, actionable feedback for the Tailor Agent to improve the next iteration. If passed=True, feedback can be empty.
 """
-        
-        response = self.client.models.generate_content(
-            model=self.model_name,
-            contents=prompt,
-            config=types.GenerateContentConfig(
-                response_mime_type="application/json",
-                response_schema=EditorScore,
-                temperature=0.1,
-            ),
-        )
-        
-        return response.parsed
+
+def editor_preprocessor(context: dict) -> dict:
+    context["extracted_text"] = extract_text_from_pdf(context["pdf_path"])
+    safe_resume = get_safe_resume_data(context.get("resume_path", "master_resume.md"))
+    context["safe_resume_json"] = safe_resume.model_dump_json(indent=2)
+    return context
+
+def EditorAgent(client) -> StructuredLLMAgent:
+    return StructuredLLMAgent(
+        client=client,
+        prompt_template=EDITOR_PROMPT_TEMPLATE,
+        response_schema=EditorScore,
+        temperature=0.1,
+        preprocessors=[editor_preprocessor]
+    )
+

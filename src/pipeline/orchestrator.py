@@ -117,7 +117,7 @@ def process_new_jobs(session, config):
     for job in new_jobs:
         print(f"Analyzing job: {job.title} at {job.company}")
         def _step(j):
-            fit_score = analyst_agent.run(j.jd_text)
+            fit_score = analyst_agent.run({"jd_text": j.jd_text})
             print(f"Fit score: {fit_score.score} - Recommendation: {fit_score.recommendation}")
             if fit_score.score >= min_fit_score:
                 j.state = JobState.ANALYZED
@@ -160,7 +160,7 @@ def process_drafted_jobs(session):
             if not os.path.exists(pdf_path):
                 raise FileNotFoundError(f"PDF not found at {pdf_path}")
                 
-            edit_score = editor_agent.run(jd_text=j.jd_text, pdf_path=pdf_path)
+            edit_score = editor_agent.run({"jd_text": j.jd_text, "pdf_path": pdf_path})
             print(f"Editor score: {edit_score.score} - Passed: {edit_score.passed}")
             
             if edit_score.passed:
