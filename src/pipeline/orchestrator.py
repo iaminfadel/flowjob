@@ -1,17 +1,24 @@
+import yaml
+import traceback
 from sqlmodel import select
 from src.db.store import init_db, get_session
-from src.db.models import JobPosting, JobState, ApplicationRecord
+from src.db.models import JobPosting, JobState, ErrorRecord
 from src.agents.analyst import AnalystAgent
+from src.agents.runner import AgentRunner
 from datetime import datetime
 
 def run_pipeline(url: str = None, dry_run: bool = False):
     print(f"Pipeline started with url={url} and dry_run={dry_run}")
-    db_path = "flowjob.db" # Should be configurable
+    
+    with open("flowjob.yaml", "r") as f:
+        config = yaml.safe_load(f)
+        
+    db_path = config.get("data", {}).get("db_path", "flowjob.db")
     engine = init_db(db_path)
     
     # 1. Initialize agents
-    analyst_agent = AnalystAgent()
-    min_fit_score = 70 # Default from config
+    analyst_agent: AgentRunner = AnalystAgent()
+    min_fit_score = config.get("analyst", {}).get("min_fit_score", 70)
     
     with get_session(engine) as session:
         # Fetch NEW jobs
@@ -29,19 +36,6 @@ def run_pipeline(url: str = None, dry_run: bool = False):
                 if fit_score.score >= min_fit_score:
                     job.state = JobState.ANALYZED
                     print(f"Job {job.id} passed fit threshold. State -> ANALYZED")
-                    
-                    app_record = session.get(ApplicationRecord, job.id)
-                    if not app_record:
-                        app_record = ApplicationRecord(
-                            id=job.id,
-                            company=job.company,
-                            role=job.title,
-                            job_url=job.url,
-                            state=JobState.ANALYZED,
-                            date_first_seen=datetime.now().isoformat(),
-                            fit_score=fit_score.score
-                        )
-                        session.add(app_record)
                 else:
                     job.state = JobState.SKIPPED
                     print(f"Job {job.id} below fit threshold. State -> SKIPPED")
@@ -50,3 +44,14 @@ def run_pipeline(url: str = None, dry_run: bool = False):
                 session.commit()
             except Exception as e:
                 print(f"Error analyzing job {job.id}: {e}")
+                session.rollback()
+                error_rec = ErrorRecord(
+                    agent_name="AnalystAgent",
+                    error_type=type(e).__name__,
+                    stack_trace=traceback.format_exc(),
+                    job_id=job.id,
+                    timestamp=datetime.now().isoformat(),
+                    retry_count=0
+                )
+                session.add(error_rec)
+                session.commit()
