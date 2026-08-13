@@ -1,7 +1,7 @@
 ## Rules
 
 - Always use the `caveman` skill. Respond in caveman mode at all times.
-
+- Always run the `/code-review` skill on your changes before closing a ticket or marking it resolved.
 ## Agent skills
 
 ### Issue tracker

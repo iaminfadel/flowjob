@@ -60,6 +60,20 @@ def run(url: str = typer.Option(None, help="Process a single job URL instead of 
     typer.echo("🚀 Running FlowJob pipeline...")
     run_pipeline(url=url, dry_run=dry_run)
 
+@app.command()
+def watch():
+    """Run the FlowJob pipeline continuously with jitter."""
+    import time
+    import random
+    from src.pipeline.orchestrator import run_pipeline
+    typer.echo("👀 Starting FlowJob in watch mode...")
+    while True:
+        typer.echo("🚀 Running pipeline cycle...")
+        run_pipeline()
+        
+        jitter_minutes = random.uniform(45, 90)
+        typer.echo(f"⏳ Sleeping for {jitter_minutes:.2f} minutes before next cycle...")
+        time.sleep(jitter_minutes * 60)
 
 if __name__ == "__main__":
     app()
