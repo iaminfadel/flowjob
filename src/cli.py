@@ -52,13 +52,32 @@ def login():
     login_linkedin()
     typer.echo("✅ State saved!")
 
+def build_agents():
+    import os
+    from google import genai
+    from src.agents.analyst import AnalystAgent
+    from src.agents.tailor import TailorAgent
+    from src.agents.editor import EditorAgent
+    from src.agents.applicator import ApplicatorAgent
+    
+    api_key = os.environ.get("GEMINI_API_KEY")
+    client = genai.Client(api_key=api_key) if api_key else None
+    
+    return {
+        "analyst": AnalystAgent(client=client),
+        "tailor": TailorAgent(client=client),
+        "editor": EditorAgent(client=client),
+        "applicator": ApplicatorAgent()
+    }
+
 @app.command()
 def run(url: str = typer.Option(None, help="Process a single job URL instead of running Scout"), 
         dry_run: bool = typer.Option(False, help="Do not apply, save PDF and form answers to disk")):
     """Run the FlowJob pipeline."""
     from src.pipeline.orchestrator import run_pipeline
     typer.echo("🚀 Running FlowJob pipeline...")
-    run_pipeline(url=url, dry_run=dry_run)
+    agents = build_agents()
+    run_pipeline(agents=agents, url=url, dry_run=dry_run)
 
 @app.command()
 def watch():
@@ -67,10 +86,11 @@ def watch():
     import random
     from src.pipeline.orchestrator import run_pipeline
     typer.echo("👀 Starting FlowJob in watch mode...")
+    agents = build_agents()
     while True:
         typer.echo("🚀 Running pipeline cycle...")
         
-        run_pipeline()
+        run_pipeline(agents=agents)
         
         jitter_minutes = random.uniform(45, 90)
         typer.echo(f"⏳ Sleeping for {jitter_minutes:.2f} minutes before next cycle...")
