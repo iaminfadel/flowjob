@@ -1,0 +1,193 @@
+﻿diff --git a/scripts/validate_resume.py b/scripts/validate_resume.py
+index 2c61e13..c157b0c 100644
+--- a/scripts/validate_resume.py
++++ b/scripts/validate_resume.py
+@@ -1,48 +1,11 @@
+-import yaml
++import sys
+ from pathlib import Path
+-from pydantic import BaseModel, ValidationError
+ 
+-class ResumeMetadata(BaseModel):
+-    schema_version: str = "1"  # Default to 1 if missing for now
+-    name: str
+-    title: str
+-    email: str
+-    phone: str
+-    location: str
+-    links: list[dict]
+-    skills: dict[str, list[str]]
+-    preferences: dict
+-    personal_nudge: dict
+-    education: list[dict]
++# Add project root to path for imports
++project_root = Path(__file__).parent.parent
++sys.path.insert(0, str(project_root))
+ 
+-def parse_master_resume(path: str = "master_resume.md") -> tuple[ResumeMetadata, str]:
+-    """Parse the hybrid YAML/Markdown master resume."""
+-    resume_path = Path(path)
+-    if not resume_path.exists():
+-        raise FileNotFoundError(f"Master resume not found: {path}")
+-        
+-    with open(resume_path, "r") as f:
+-        content = f.read()
+-        
+-    if not content.startswith("---"):
+-        raise ValueError("Master resume must start with YAML frontmatter enclosed in '---'")
+-        
+-    parts = content.split("---", 2)
+-    if len(parts) < 3:
+-        raise ValueError("Invalid frontmatter format in master resume.")
+-        
+-    yaml_content = parts[1]
+-    markdown_content = parts[2].strip()
+-    
+-    try:
+-        metadata_dict = yaml.safe_load(yaml_content)
+-        metadata = ResumeMetadata(**metadata_dict)
+-    except yaml.YAMLError as e:
+-        raise ValueError(f"Failed to parse YAML frontmatter: {e}")
+-    except ValidationError as e:
+-        raise ValueError(f"Invalid master resume metadata schema: {e}")
+-        
+-    return metadata, markdown_content
++from src.utils.resume_parser import parse_master_resume
+ 
+ def validate_resume(path: str = "master_resume.md") -> bool:
+     """Validate the master resume and print diagnostics."""
+diff --git a/src/agents/analyst.py b/src/agents/analyst.py
+new file mode 100644
+index 0000000..819c854
+--- /dev/null
++++ b/src/agents/analyst.py
+@@ -0,0 +1,48 @@
++import os
++import yaml
++from google import genai
++from google.genai import types
++from src.db.models import FitScore
++from src.utils.resume_parser import get_safe_resume_data
++
++class AnalystAgent:
++    def __init__(self, model_name: str = "gemini-2.5-pro", min_fit_score: int = 70):
++        self.model_name = model_name
++        self.min_fit_score = min_fit_score
++        # Initialize AGY SDK / genai client
++        self.client = genai.Client(api_key=os.environ.get("GEMINI_API_KEY"))
++
++    def analyze_job(self, jd_text: str, resume_path: str = "master_resume.md") -> FitScore:
++        """
++        Analyze a job description against the safe parts of the master resume.
++        Returns a parsed FitScore Pydantic object.
++        """
++        safe_resume = get_safe_resume_data(resume_path)
++        
++        prompt = f"""
++You are an expert technical recruiter analyzing a job posting against a candidate's profile.
++
++Candidate Profile (No PII):
++{yaml.dump(safe_resume)}
++
++Job Description:
++{jd_text}
++
++Analyze the fit and return a structured assessment. 
++The score should be 0-100.
++Identify matching skills from the candidate's profile that are required in the JD.
++Identify missing skills that are required in the JD but not found in the profile.
++Provide a recommendation: "apply", "skip", or "review".
++"""
++        
++        response = self.client.models.generate_content(
++            model=self.model_name,
++            contents=prompt,
++            config=types.GenerateContentConfig(
++                response_mime_type="application/json",
++                response_schema=FitScore,
++                temperature=0.2,
++            ),
++        )
++        
++        return response.parsed
+diff --git a/src/db/models.py b/src/db/models.py
+index 350d405..9f7d871 100644
+--- a/src/db/models.py
++++ b/src/db/models.py
+@@ -1,6 +1,13 @@
+ from enum import Enum
+-from typing import Optional
++from typing import Optional, Literal
+ from sqlmodel import SQLModel, Field
++from pydantic import BaseModel
++
++class FitScore(BaseModel):
++    score: int
++    matching_skills: list[str]
++    missing_skills: list[str]
++    recommendation: Literal["apply", "skip", "review"]
+ 
+ class JobState(str, Enum):
+     NEW = "NEW"
+diff --git a/src/utils/resume_parser.py b/src/utils/resume_parser.py
+new file mode 100644
+index 0000000..71a35b6
+--- /dev/null
++++ b/src/utils/resume_parser.py
+@@ -0,0 +1,56 @@
++import yaml
++from pathlib import Path
++from pydantic import BaseModel, ValidationError
++
++class ResumeMetadata(BaseModel):
++    schema_version: str = "1"
++    name: str
++    title: str
++    email: str
++    phone: str
++    location: str
++    links: list[dict]
++    skills: dict[str, list[str]]
++    preferences: dict
++    personal_nudge: dict
++    education: list[dict]
++
++def parse_master_resume(path: str = "master_resume.md") -> tuple[ResumeMetadata, str]:
++    """Parse the hybrid YAML/Markdown master resume."""
++    resume_path = Path(path)
++    if not resume_path.exists():
++        raise FileNotFoundError(f"Master resume not found: {path}")
++        
++    with open(resume_path, "r", encoding="utf-8") as f:
++        content = f.read()
++        
++    if not content.startswith("---"):
++        raise ValueError("Master resume must start with YAML frontmatter enclosed in '---'")
++        
++    parts = content.split("---", 2)
++    if len(parts) < 3:
++        raise ValueError("Invalid frontmatter format in master resume.")
++        
++    yaml_content = parts[1]
++    markdown_content = parts[2].strip()
++    
++    try:
++        metadata_dict = yaml.safe_load(yaml_content)
++        metadata = ResumeMetadata(**metadata_dict)
++    except yaml.YAMLError as e:
++        raise ValueError(f"Failed to parse YAML frontmatter: {e}")
++    except ValidationError as e:
++        raise ValueError(f"Invalid master resume metadata schema: {e}")
++        
++    return metadata, markdown_content
++
++def get_safe_resume_data(path: str = "master_resume.md") -> dict:
++    """Extract skills taxonomy, preferences, education, and experience bullets without PII."""
++    metadata, content = parse_master_resume(path)
++    
++    return {
++        "skills": metadata.skills,
++        "preferences": metadata.preferences,
++        "education": metadata.education,
++        "experience": content
++    }
