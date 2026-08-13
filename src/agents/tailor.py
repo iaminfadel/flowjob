@@ -2,9 +2,6 @@ import os
 import json
 from pathlib import Path
 from typing import Optional, List, Dict
-import fitz  # PyMuPDF
-from jinja2 import Environment, FileSystemLoader
-from playwright.sync_api import sync_playwright
 from pydantic import BaseModel, Field
 
 from google import genai
@@ -12,6 +9,7 @@ from google.genai import types
 
 from src.agents.runner import AgentRunner
 from src.utils.resume_parser import get_safe_resume_data, parse_master_resume
+from src.utils.document_generator import DocumentGenerator
 
 # JSON Resume Schema Pydantic Models for GenAI
 class Location(BaseModel):
@@ -69,49 +67,6 @@ def parse_location(location: str) -> dict:
         }
     return {"city": location}
 
-def generate_resume_pdf(tailored_resume: dict, metadata, output_dir: str) -> str:
-    """Renders the HTML and PDF for the given tailored resume dict."""
-    os.makedirs(output_dir, exist_ok=True)
-    
-    # 1. Save JSON
-    json_path = os.path.join(output_dir, "resume.json")
-    with open(json_path, "w", encoding="utf-8") as f:
-        json.dump(tailored_resume, f, indent=2)
-
-    # 2. Render HTML using Jinja2
-    template_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "utils")
-    env = Environment(loader=FileSystemLoader(template_dir))
-    template = env.get_template("resume_template.html")
-    html_content = template.render(**tailored_resume)
-    
-    html_path = os.path.join(output_dir, "resume.html")
-    with open(html_path, "w", encoding="utf-8") as f:
-        f.write(html_content)
-        
-    # 3. Print PDF using Playwright
-    pdf_path = os.path.join(output_dir, "resume.pdf")
-    with sync_playwright() as p:
-        # Playwright print-to-pdf requires headless=True
-        browser = p.chromium.launch(headless=True)
-        page = browser.new_page()
-        # use absolute path for file:// url
-        abs_html_path = Path(html_path).absolute()
-        page.goto(f"file:///{abs_html_path}", wait_until="networkidle")
-        page.pdf(path=pdf_path, format="A4", margin={"top": "0", "right": "0", "bottom": "0", "left": "0"})
-        browser.close()
-        
-    # 4. Validate ATS parseability with PyMuPDF
-    doc = fitz.open(pdf_path)
-    extracted_text = ""
-    for page in doc:
-        extracted_text += page.get_text()
-    doc.close()
-    
-    if metadata.name not in extracted_text or metadata.email not in extracted_text:
-        raise ValueError(f"Generated PDF at {pdf_path} failed ATS validation: contact info not found in extracted text.")
-        
-    return pdf_path
-
 class TailorAgent(AgentRunner):
     def __init__(self, model_name: str = "gemini-2.5-pro"):
         self.model_name = model_name
@@ -168,4 +123,6 @@ Candidate's Safe Resume Data:
         if not tailored_resume.get("education") and hasattr(metadata, "education"):
             tailored_resume["education"] = metadata.education
 
-        return generate_resume_pdf(tailored_resume, metadata, output_dir)
+        generator = DocumentGenerator()
+        return generator.generate(tailored_resume, metadata, output_dir)
+
