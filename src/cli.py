@@ -44,5 +44,22 @@ def validate(
         
     typer.echo("\n🚀 Validation complete. FlowJob is ready.")
 
+@app.command()
+def login():
+    """Launch headed browser to authenticate with LinkedIn and save state."""
+    from src.tools.browser import login_linkedin
+    typer.echo("Launching browser... Please log in to LinkedIn.")
+    login_linkedin()
+    typer.echo("✅ State saved!")
+
+@app.command()
+def run(url: str = typer.Option(None, help="Process a single job URL instead of running Scout"), 
+        dry_run: bool = typer.Option(False, help="Do not apply, save PDF and form answers to disk")):
+    """Run the FlowJob pipeline."""
+    from src.pipeline.orchestrator import run_pipeline
+    typer.echo("🚀 Running FlowJob pipeline...")
+    run_pipeline(url=url, dry_run=dry_run)
+
+
 if __name__ == "__main__":
     app()

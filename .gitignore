@@ -1,0 +1,18 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+env/
+venv/
+.env
+
+# Playwright
+browser_data/
+
+# Databases
+*.db
+*.sqlite3
+
+# Flowjob specific
+output/
