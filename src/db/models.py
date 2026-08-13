@@ -55,3 +55,8 @@ class ErrorRecord(SQLModel, table=True):
     job_id: str
     timestamp: str
     retry_count: int
+
+class PipelineRun(SQLModel, table=True):
+    id: Optional[int] = Field(default=None, primary_key=True)
+    timestamp: str
+    success: bool = True

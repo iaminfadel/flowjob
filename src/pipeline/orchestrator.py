@@ -231,3 +231,9 @@ def run_pipeline(url: str = None, dry_run: bool = False):
         process_drafted_jobs(session)
         process_edited_jobs(session)
         process_pending_approval_jobs(session)
+
+        if not dry_run:
+            from src.db.models import PipelineRun
+            run_record = PipelineRun(timestamp=datetime.now().isoformat(), success=True)
+            session.add(run_record)
+            session.commit()
