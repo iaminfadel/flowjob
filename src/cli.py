@@ -69,6 +69,7 @@ def watch():
     typer.echo("👀 Starting FlowJob in watch mode...")
     while True:
         typer.echo("🚀 Running pipeline cycle...")
+        
         run_pipeline()
         
         jitter_minutes = random.uniform(45, 90)

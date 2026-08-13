@@ -218,6 +218,11 @@ def process_pending_approval_jobs(session):
 def run_pipeline(url: str = None, dry_run: bool = False):
     print(f"Pipeline started with url={url} and dry_run={dry_run}")
     
+    from src.tools.browser import check_session_health
+    if not check_session_health():
+        import sys
+        sys.exit(1)
+
     with open("flowjob.yaml", "r") as f:
         config = yaml.safe_load(f)
         
