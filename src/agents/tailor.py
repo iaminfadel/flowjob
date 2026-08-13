@@ -117,7 +117,7 @@ class TailorAgent(AgentRunner):
         self.model_name = model_name
         self.client = genai.Client(api_key=os.environ.get("GEMINI_API_KEY"))
 
-    def run(self, jd_text: str, resume_path: str = "master_resume.md", output_dir: str = "output") -> str:
+    def run(self, jd_text: str, resume_path: str = "master_resume.md", output_dir: str = "output", feedback: Optional[str] = None) -> str:
         """
         Tailors the safe master resume for a specific JD, generates HTML & PDF,
         validates PDF with PyMuPDF, and returns the path to the PDF.
@@ -139,6 +139,8 @@ Job Description:
 Candidate's Safe Resume Data:
 {safe_resume.model_dump_json(indent=2)}
 """
+        if feedback:
+            prompt += f"\n\nFEEDBACK FROM PREVIOUS ATTEMPT (You MUST address this):\n{feedback}\n"
         
         response = self.client.models.generate_content(
             model=self.model_name,

@@ -31,6 +31,8 @@ class JobPosting(SQLModel, table=True):
     posted_date: str
     jd_text: str
     state: JobState = Field(default=JobState.NEW)
+    tailor_retries: int = Field(default=0)
+    tailor_feedback: Optional[str] = None
 
 class ApplicationRecord(SQLModel, table=True):
     id: str = Field(primary_key=True)

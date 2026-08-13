@@ -5,6 +5,7 @@ from src.db.store import init_db, get_session
 from src.db.models import JobPosting, JobState, ErrorRecord
 from src.agents.analyst import AnalystAgent
 from src.agents.tailor import TailorAgent
+from src.agents.editor import EditorAgent
 from src.agents.runner import AgentRunner
 from datetime import datetime
 import os
@@ -63,7 +64,7 @@ def process_analyzed_jobs(session):
         print(f"Tailoring resume for job: {job.title} at {job.company}")
         try:
             output_dir = os.path.join("data", "resumes", job.id)
-            pdf_path = tailor_agent.run(jd_text=job.jd_text, output_dir=output_dir)
+            pdf_path = tailor_agent.run(jd_text=job.jd_text, output_dir=output_dir, feedback=job.tailor_feedback)
             print(f"Generated tailored resume PDF: {pdf_path}")
             job.state = JobState.DRAFTED
             session.add(job)
@@ -74,6 +75,45 @@ def process_analyzed_jobs(session):
             job.state = JobState.TAILOR_FAIL
             session.add(job)
             log_job_error(session, "TailorAgent", e, job.id)
+            session.commit()
+
+def process_drafted_jobs(session):
+    editor_agent: AgentRunner = EditorAgent()
+    statement = select(JobPosting).where(JobPosting.state == JobState.DRAFTED)
+    drafted_jobs = session.exec(statement).all()
+    
+    print(f"Found {len(drafted_jobs)} DRAFTED jobs.")
+    
+    for job in drafted_jobs:
+        print(f"Editing resume for job: {job.title} at {job.company}")
+        try:
+            pdf_path = os.path.join("data", "resumes", job.id, "resume.pdf")
+            if not os.path.exists(pdf_path):
+                raise FileNotFoundError(f"PDF not found at {pdf_path}")
+                
+            edit_score = editor_agent.run(jd_text=job.jd_text, pdf_path=pdf_path)
+            print(f"Editor score: {edit_score.score} - Passed: {edit_score.passed}")
+            
+            if edit_score.passed:
+                job.state = JobState.PENDING_APPROVAL
+                job.tailor_feedback = None
+                print(f"Job {job.id} passed Editor. State -> PENDING_APPROVAL")
+            else:
+                if job.tailor_retries < 1:
+                    print(f"Job {job.id} failed Editor. Retrying Tailor. Feedback: {edit_score.feedback}")
+                    job.tailor_retries += 1
+                    job.tailor_feedback = edit_score.feedback
+                    job.state = JobState.ANALYZED  # Send back to Tailor
+                else:
+                    print(f"Job {job.id} failed Editor. Max retries reached. State -> EDIT_FAIL")
+                    job.state = JobState.EDIT_FAIL
+                    
+            session.add(job)
+            session.commit()
+        except Exception as e:
+            print(f"Error editing resume for job {job.id}: {e}")
+            session.rollback()
+            log_job_error(session, "EditorAgent", e, job.id)
             session.commit()
 
 def run_pipeline(url: str = None, dry_run: bool = False):
@@ -88,3 +128,4 @@ def run_pipeline(url: str = None, dry_run: bool = False):
     with get_session(engine) as session:
         process_new_jobs(session, config)
         process_analyzed_jobs(session)
+        process_drafted_jobs(session)
