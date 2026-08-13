@@ -6,11 +6,13 @@ from src.db.models import JobPosting, JobState, ErrorRecord
 from src.agents.analyst import AnalystAgent
 from src.agents.tailor import TailorAgent
 from src.agents.editor import EditorAgent
+from src.agents.applicator import ApplicatorAgent
 from src.agents.runner import AgentRunner
 from datetime import datetime
 import os
 import yaml
 import traceback
+import subprocess
 
 def log_job_error(session, agent_name: str, error: Exception, job_id: str):
     error_rec = ErrorRecord(
@@ -22,6 +24,24 @@ def log_job_error(session, agent_name: str, error: Exception, job_id: str):
         retry_count=0
     )
     session.add(error_rec)
+
+def handle_job_failure(session, agent_name: str, error: Exception, job, fallback_state=JobState.FAILED):
+    print(f"Error applying to job {job.id}: {error}")
+    session.rollback()
+    job.state = fallback_state
+    session.add(job)
+    log_job_error(session, agent_name, error, job.id)
+    session.commit()
+
+def prompt_user_approval(job) -> bool:
+    print(f"Prompting user for job: {job.title} at {job.company}")
+    try:
+        subprocess.run(["notify-send", "FlowJob: Job ready for approval!", f"{job.title} at {job.company}"])
+    except FileNotFoundError:
+        print("notify-send not found, skipping OS notification.")
+        
+    choice = input(f"Apply to {job.title} at {job.company}? [y/N]: ")
+    return choice.strip().lower() == 'y'
 
 def process_new_jobs(session, config):
     analyst_agent: AgentRunner = AnalystAgent()
@@ -129,6 +149,41 @@ def process_edited_jobs(session):
         session.add(job)
     session.commit()
 
+def process_pending_approval_jobs(session):
+    statement = select(JobPosting).where(JobPosting.state == JobState.PENDING_APPROVAL)
+    pending_jobs = session.exec(statement).all()
+    
+    if pending_jobs:
+        print(f"Found {len(pending_jobs)} PENDING_APPROVAL jobs.")
+        applicator_agent: AgentRunner = ApplicatorAgent()
+        
+    for job in pending_jobs:
+        if prompt_user_approval(job):
+            try:
+                success = applicator_agent.run(job)
+                if success:
+                    job.state = JobState.APPLIED
+                    print(f"Job {job.id} successfully APPLIED.")
+                else:
+                    job.state = JobState.FAILED
+                    print(f"Job {job.id} application FAILED.")
+                session.add(job)
+                session.commit()
+            except RuntimeError as e:
+                if str(e) == "CAPTCHA_DETECTED":
+                    print(f"CAPTCHA detected for job {job.id}. Halting pipeline immediately.")
+                    handle_job_failure(session, "ApplicatorAgent", e, job, JobState.FAILED)
+                    break
+                else:
+                    handle_job_failure(session, "ApplicatorAgent", e, job, JobState.FAILED)
+            except Exception as e:
+                handle_job_failure(session, "ApplicatorAgent", e, job, JobState.FAILED)
+        else:
+            print(f"Job {job.id} skipped by user.")
+            job.state = JobState.SKIPPED
+            session.add(job)
+            session.commit()
+
 def run_pipeline(url: str = None, dry_run: bool = False):
     print(f"Pipeline started with url={url} and dry_run={dry_run}")
     
@@ -143,3 +198,4 @@ def run_pipeline(url: str = None, dry_run: bool = False):
         process_analyzed_jobs(session)
         process_drafted_jobs(session)
         process_edited_jobs(session)
+        process_pending_approval_jobs(session)
