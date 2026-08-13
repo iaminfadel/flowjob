@@ -9,7 +9,6 @@ from google.genai import types
 
 from src.agents.runner import AgentRunner
 from src.utils.resume_parser import get_safe_resume_data, parse_master_resume
-from src.utils.document_generator import DocumentGenerator
 
 # JSON Resume Schema Pydantic Models for GenAI
 class Location(BaseModel):
@@ -72,10 +71,10 @@ class TailorAgent(AgentRunner):
         self.model_name = model_name
         self.client = genai.Client(api_key=os.environ.get("GEMINI_API_KEY"))
 
-    def run(self, jd_text: str, resume_path: str = "master_resume.md", output_dir: str = "output", feedback: Optional[str] = None) -> str:
+    def run(self, jd_text: str, resume_path: str = "master_resume.md", feedback: Optional[str] = None) -> dict:
         """
-        Tailors the safe master resume for a specific JD, generates HTML & PDF,
-        validates PDF with PyMuPDF, and returns the path to the PDF.
+        Tailors the safe master resume for a specific JD, re-injects PII,
+        and returns the tailored resume data as a dictionary.
         """
         # 1. Get safe data for LLM
         safe_resume = get_safe_resume_data(resume_path)
@@ -123,6 +122,5 @@ Candidate's Safe Resume Data:
         if not tailored_resume.get("education") and hasattr(metadata, "education"):
             tailored_resume["education"] = metadata.education
 
-        generator = DocumentGenerator()
-        return generator.generate(tailored_resume, metadata, output_dir)
+        return tailored_resume
 
