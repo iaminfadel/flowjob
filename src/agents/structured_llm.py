@@ -3,7 +3,6 @@ from pydantic import BaseModel
 from google import genai
 from google.genai import types
 from src.agents.runner import AgentRunner
-import os
 
 class StructuredLLMAgent(AgentRunner):
     def __init__(self, client: genai.Client, prompt_template: str, response_schema: Type[BaseModel], temperature: float = 0.2, preprocessors: List[Callable] = None):
@@ -33,7 +32,7 @@ class StructuredLLMAgent(AgentRunner):
                     ),
                 )
                 return response.parsed
-            except Exception as e:
+            except Exception:
                 retries -= 1
                 if retries == 0:
-                    raise e
+                    raise
