@@ -67,9 +67,9 @@ def parse_location(location: str) -> dict:
     return {"city": location}
 
 class TailorAgent(AgentRunner):
-    def __init__(self, model_name: str = "gemini-2.5-pro"):
+    def __init__(self, client, model_name: str = "gemini-2.5-pro"):
         self.model_name = model_name
-        self.client = genai.Client(api_key=os.environ.get("GEMINI_API_KEY"))
+        self.client = client
 
     def run(self, jd_text: str, resume_path: str = "master_resume.md", feedback: Optional[str] = None) -> dict:
         """

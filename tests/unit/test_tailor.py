@@ -10,13 +10,11 @@ class MockResponse:
     def __init__(self):
         self.parsed = MockParsed()
 
-@patch("src.agents.tailor.genai.Client")
 @patch("src.agents.tailor.get_safe_resume_data")
 @patch("src.agents.tailor.parse_master_resume")
-def test_tailor_returns_json(mock_parse_master, mock_safe_data, mock_client_class):
+def test_tailor_returns_json(mock_parse_master, mock_safe_data):
     mock_client = MagicMock()
     mock_client.models.generate_content.return_value = MockResponse()
-    mock_client_class.return_value = mock_client
     
     mock_safe = MagicMock()
     mock_safe.model_dump_json.return_value = "{}"
@@ -32,7 +30,7 @@ def test_tailor_returns_json(mock_parse_master, mock_safe_data, mock_client_clas
     
     mock_parse_master.return_value = (mock_metadata, "")
     
-    agent = TailorAgent()
+    agent = TailorAgent(client=mock_client)
     result = agent.run("JD")
     
     assert isinstance(result, dict)
