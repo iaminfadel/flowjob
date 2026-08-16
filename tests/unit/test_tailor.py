@@ -3,7 +3,7 @@ from unittest.mock import patch, MagicMock
 from src.agents.tailor import TailorAgent
 
 @patch.dict('os.environ', {'OPENROUTER_API_KEY': 'test_key'})
-@patch("src.agents.structured_llm.ChatOpenAI")
+@patch("src.agents.llm_factory.ChatOpenAI")
 @patch("src.agents.tailor.get_safe_resume_data")
 @patch("src.agents.tailor.parse_master_resume")
 def test_tailor_returns_json(mock_parse_master, mock_safe_data, mock_chatopenai):

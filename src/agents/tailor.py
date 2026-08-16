@@ -7,6 +7,7 @@ from pydantic import BaseModel, Field
 from src.agents.runner import AgentRunner
 from src.agents.structured_llm import LangChainStructuredAgent
 from src.utils.resume_parser import get_safe_resume_data, parse_master_resume
+from src.utils.context import build_candidate_block, build_jd_section
 
 # JSON Resume Schema Pydantic Models for GenAI
 class Location(BaseModel):
@@ -71,17 +72,16 @@ Select the most relevant experience, projects, and skills to tailor the resume f
 Limit the experience to the most relevant items, and re-write or select the highlights that best match the JD.
 Make it concise and impactful. Return it matching the JSON Resume schema structure.
 
-Job Description:
-{jd_text}
+{candidate_block}
 
-Candidate's Safe Resume Data:
-{safe_resume_json}
+{jd_section}
 {feedback_section}
 """
 
 def tailor_preprocessor(context: dict) -> dict:
     safe_resume = get_safe_resume_data(context.get("resume_path", "master_resume.md"))
-    context["safe_resume_json"] = safe_resume.model_dump_json(indent=2)
+    context["candidate_block"] = build_candidate_block(safe_resume.skills, safe_resume.preferences, safe_resume.experience)
+    context["jd_section"] = build_jd_section(context.get("jd_text", ""))
     feedback = context.get("feedback")
     if feedback:
         context["feedback_section"] = f"\n\nFEEDBACK FROM PREVIOUS ATTEMPT (You MUST address this):\n{feedback}\n"
@@ -102,7 +102,7 @@ class TailorAgent(AgentRunner):
             openrouter_api_key=openrouter_api_key
         )
 
-    def run(self, jd_text: str, resume_path: str = "master_resume.md", feedback: Optional[str] = None) -> dict:
+    def run(self, jd_text: str, resume_path: str = "master_resume.md", feedback: Optional[str] = None, job_id: str = "", agent_name: str = "TailorAgent") -> dict:
         """
         Tailors the safe master resume for a specific JD, re-injects PII,
         and returns the tailored resume data as a dictionary.
@@ -113,7 +113,7 @@ class TailorAgent(AgentRunner):
             "feedback": feedback
         }
         
-        parsed_response = self.structured_agent.run(context)
+        parsed_response = self.structured_agent.run(context, job_id=job_id, agent_name=agent_name)
         tailored_resume = parsed_response.model_dump()
         
         # 3. Re-inject PII

@@ -1,14 +1,14 @@
 import os
 import json
-from typing import Optional, Callable, Dict, Any
+from typing import Optional, Callable, Dict, Any, List
 from pydantic import BaseModel, Field
 from sqlmodel import Session, select
-from langchain_openai import ChatOpenAI
 from langchain_core.messages import SystemMessage, HumanMessage
 from src.db.models import Job, JobState
 from src.agents.structured_llm import invoke_with_schema_tool
 from src.agents.auditor import audit_bullet
 from src.agents.writer import EditResumeTool, execute_edit
+from src.agents.llm_factory import load_providers, create_chat, invoke_llm, Provider, order_providers, mark_provider_failure, session_extra_body
 from src.pipeline.orchestrator import load_draft_json, save_draft_json
 
 class SynthesizedSTARBullet(BaseModel):
@@ -41,54 +41,69 @@ def generate_interview_question(
     requirement: str,
     turns: list[dict],
     model_name: str = "google/gemini-2.5-pro",
-    llm: Any = None
+    llm: Any = None,
+    providers: List[Provider] = None,
+    job_id: str = "",
+    agent_name: str = "Interviewer"
 ) -> str:
     """Generate the next STAR interview question for a gap."""
     if not turns:
         return f"The role requires '{requirement}'. Can you describe a specific project or situation where you used this, and what the scope was?"
     
-    if llm is None and os.environ.get("OPENROUTER_API_KEY"):
-        llm = ChatOpenAI(
-            model=model_name,
-            api_key=os.environ.get("OPENROUTER_API_KEY"),
-            base_url="https://openrouter.ai/api/v1",
-            temperature=0.3
-        )
-    elif llm is None:
-        return f"What specific actions did you take with {requirement}, and what was the measurable result or metric?"
-
     prompt_history = "\n".join([f"{t['role'].capitalize()}: {t['text']}" for t in turns])
     messages = [
         SystemMessage(content=INTERVIEWER_SYSTEM_PROMPT.format(requirement=requirement)),
         HumanMessage(content=f"Conversation so far:\n{prompt_history}\n\nAsk the next STAR question:")
     ]
-    resp = llm.invoke(messages)
-    return getattr(resp, "content", str(resp)).strip()
+
+    if llm is not None:
+        resp = llm.invoke(messages)
+        return getattr(resp, "content", str(resp)).strip()
+
+    chain = providers or []
+    for provider in order_providers(chain):
+        try:
+            chat = create_chat(provider, temperature=0.3, extra_body=session_extra_body(provider, job_id))
+            resp = invoke_llm(chat, messages, agent_name=agent_name, job_id=job_id, provider=provider.name, model=provider.model)
+            return getattr(resp, "content", str(resp)).strip()
+        except Exception as e:
+            mark_provider_failure(provider)
+            print(f"[interviewer] Provider {provider.name} failed: {type(e).__name__}: {e}. Trying next...")
+
+    return f"What specific actions did you take with {requirement}, and what was the measurable result or metric?"
 
 def synthesize_star_bullet(
     requirement: str,
     turns: list[dict],
     model_name: str = "google/gemini-2.5-pro",
-    llm: Any = None
+    llm: Any = None,
+    providers: List[Provider] = None,
+    job_id: str = "",
+    agent_name: str = "Interviewer"
 ) -> SynthesizedSTARBullet:
     """Synthesize a STAR bullet from the interview transcript."""
     transcript_text = "\n".join([f"{t['role'].capitalize()}: {t['text']}" for t in turns])
     
-    if llm is None and os.environ.get("OPENROUTER_API_KEY"):
-        llm = ChatOpenAI(
-            model=model_name,
-            api_key=os.environ.get("OPENROUTER_API_KEY"),
-            base_url="https://openrouter.ai/api/v1",
-            temperature=0.1
-        )
-        
+    prompt = SYNTHESIZER_SYSTEM_PROMPT.format(requirement=requirement, transcript=transcript_text)
+
     if llm is not None:
         try:
-            prompt = SYNTHESIZER_SYSTEM_PROMPT.format(requirement=requirement, transcript=transcript_text)
             return invoke_with_schema_tool(llm, [prompt], SynthesizedSTARBullet)
         except Exception:
             pass
-            
+
+    chain = providers or []
+    for provider in order_providers(chain):
+        try:
+            chat = create_chat(provider, temperature=0.1, extra_body=session_extra_body(provider, job_id))
+            return invoke_with_schema_tool(
+                chat, [prompt], SynthesizedSTARBullet,
+                providers=[provider], agent_name=agent_name, job_id=job_id
+            )
+        except Exception as e:
+            mark_provider_failure(provider)
+            print(f"[interviewer] Synthesizer provider {provider.name} failed: {type(e).__name__}: {e}. Trying next...")
+
     # Fallback synthesizer if LLM unavailable
     last_candidate_turn = next((t["text"] for t in reversed(turns) if t["role"] == "candidate"), "Built systems")
     return SynthesizedSTARBullet(
@@ -105,7 +120,8 @@ def run_grilling_session(
     interactive: bool = True,
     model_name: str = "google/gemini-2.5-pro",
     max_turns_per_gap: int = 5,
-    llm: Any = None
+    llm: Any = None,
+    providers: List[Provider] = None
 ) -> bool:
     """Execute or resume an interactive grilling session for a job."""
     job = session.get(Job, job_id)
@@ -136,7 +152,7 @@ def run_grilling_session(
         turns = gap_info.setdefault("turns", [])
         
         while len(turns) < max_turns_per_gap * 2:
-            question = generate_interview_question(req_text, turns, model_name=model_name, llm=llm)
+            question = generate_interview_question(req_text, turns, model_name=model_name, llm=llm, providers=providers, job_id=job_id)
             print(f"\n🤖 Interviewer: {question}")
             turns.append({"role": "interviewer", "text": question})
             
@@ -163,7 +179,7 @@ def run_grilling_session(
             # If we have at least 1 candidate answer, attempt synthesis
             candidate_turns = [t for t in turns if t["role"] == "candidate"]
             if len(candidate_turns) >= 2 or len(turns) >= 4:
-                synth = synthesize_star_bullet(req_text, turns, model_name=model_name, llm=llm)
+                synth = synthesize_star_bullet(req_text, turns, model_name=model_name, llm=llm, providers=providers, job_id=job_id)
                 print(f"\n✨ Proposed Resume Bullet:\n   {synth.bullet}")
                 
                 confirm = input_fn("\nAccept this bullet? (y/n/edit): ").strip().lower()

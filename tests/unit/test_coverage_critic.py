@@ -50,7 +50,7 @@ def test_critic_preprocessor():
     assert "# Test Engineer" in processed["draft_markdown"]
 
 @patch.dict('os.environ', {'OPENROUTER_API_KEY': 'test_key'})
-@patch('src.agents.structured_llm.ChatOpenAI')
+@patch('src.agents.llm_factory.ChatOpenAI')
 def test_coverage_critic_agent_run(mock_chatopenai):
     mock_llm = MagicMock()
     mock_llm_with_tools = MagicMock()

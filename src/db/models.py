@@ -54,3 +54,22 @@ class PipelineRun(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
     timestamp: str
     success: bool = True
+
+class LLMInteraction(SQLModel, table=True):
+    """Persisted record of every LLM request: prompt, response, provider, tokens, cost."""
+    id: Optional[int] = Field(default=None, primary_key=True)
+    timestamp: str
+    agent_name: str
+    job_id: str = ""
+    provider: str = ""
+    model: str = ""
+    prompt: str = ""
+    response: str = ""
+    extracted: dict = Field(default_factory=dict, sa_column=Column(JSON))
+    prompt_tokens: int = 0
+    completion_tokens: int = 0
+    cached_tokens: int = 0
+    cost_usd: float = 0.0
+    latency_ms: int = 0
+    success: bool = True
+    error: str = ""

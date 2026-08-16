@@ -2,8 +2,8 @@ import re
 import os
 from typing import Optional, List, Dict
 from pydantic import BaseModel, Field
-from langchain_openai import ChatOpenAI
 from src.agents.structured_llm import invoke_with_schema_tool
+from src.agents.llm_factory import load_providers, create_chat, has_provider_keys
 from src.utils.resume_parser import parse_master_resume
 
 class LLMBulletAudit(BaseModel):
@@ -41,7 +41,7 @@ def extract_bullets(text: str) -> list[str]:
         bullets.append('\n'.join(current_bullet))
     return bullets
 
-def audit_bullet(bullet: str, llm=None) -> BulletAudit:
+def audit_bullet(bullet: str, llm=None, agent_name: str = "Auditor", job_id: str = "", providers=None) -> BulletAudit:
     bullet_stripped = bullet.strip()
     clean_bullet = re.sub(r'^\s*[-*]\s*', '', bullet_stripped)
     
@@ -91,7 +91,7 @@ def audit_bullet(bullet: str, llm=None) -> BulletAudit:
                 f"Evaluate if the bullet is specific (names concrete tools, technologies, scale, or outcomes) "
                 f"and does not use vague buzzwords."
             )
-            llm_result = invoke_with_schema_tool(llm, [prompt], LLMBulletAudit)
+            llm_result = invoke_with_schema_tool(llm, [prompt], LLMBulletAudit, providers=providers, agent_name=agent_name, job_id=job_id)
             checks["C3_Specific"] = llm_result.is_specific
             if not llm_result.is_specific or not llm_result.overall_pass:
                 issues.extend(llm_result.issues or ["C3: Lacks technical specificity"])
@@ -109,24 +109,22 @@ def audit_bullet(bullet: str, llm=None) -> BulletAudit:
         issues=issues
     )
 
-def audit_master_resume(master_resume_path: str = "master_resume.md", llm=None, model_name: str = "google/gemini-2.5-pro") -> BankAuditReport:
+def audit_master_resume(master_resume_path: str = "master_resume.md", llm=None, model_name: str = "google/gemini-2.5-pro", agent_name: str = "Auditor", job_id: str = "") -> BankAuditReport:
     _, md_content = parse_master_resume(master_resume_path)
     bullets = extract_bullets(md_content)
     
-    if llm is None and os.environ.get("OPENROUTER_API_KEY"):
-        llm = ChatOpenAI(
-            model=model_name,
-            api_key=os.environ.get("OPENROUTER_API_KEY"),
-            base_url="https://openrouter.ai/api/v1",
-            temperature=0.0
-        )
+    providers = None
+    if llm is None and has_provider_keys():
+        providers = load_providers()
+        if providers:
+            llm = create_chat(providers[0], temperature=0.0)
         
     audited = []
     passed_count = 0
     failed_count = 0
     
     for b in bullets:
-        res = audit_bullet(b, llm=llm)
+        res = audit_bullet(b, llm=llm, agent_name=agent_name, job_id=job_id, providers=providers)
         audited.append(res)
         if res.passed:
             passed_count += 1

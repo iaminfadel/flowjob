@@ -1,5 +1,5 @@
 scout:
-  max_scrape_per_run: 1
+  max_scrape_per_run: 2
   # time_filter: "past_24_hours"
   
 analyst:
@@ -38,7 +38,38 @@ llm:
   default_model: "qwen/qwen3.8-27b"
   llm_timeout_seconds: 60
   max_retries: 3
-  openrouter_base_url: "https://api.orcarouter.ai/v1"
+  openrouter_base_url: "https://openrouter.ai/api/v1"
+  providers:
+    - name: openrouter
+      base_url: "https://openrouter.ai/api/v1"
+      api_key_env: OPENROUTER_API_KEY
+      model: "qwen/qwen3.8-27b"
+      priority: 1
+    - name: gemini-lite
+      base_url: "https://generativelanguage.googleapis.com/v1beta/openai/"
+      api_key_env: GEMINI_API_KEY
+      model: "gemini-3.1-flash-lite"
+      priority: 2
+    - name: gemini-lite-latest
+      base_url: "https://generativelanguage.googleapis.com/v1beta/openai/"
+      api_key_env: GEMINI_API_KEY
+      model: "gemini-flash-lite-latest"
+      priority: 3
+    - name: gemini-35
+      base_url: "https://generativelanguage.googleapis.com/v1beta/openai/"
+      api_key_env: GEMINI_API_KEY
+      model: "gemini-3.5-flash"
+      priority: 4
+    - name: gemini-36
+      base_url: "https://generativelanguage.googleapis.com/v1beta/openai/"
+      api_key_env: GEMINI_API_KEY
+      model: "gemini-3.6-flash"
+      priority: 5
+    - name: orca
+      base_url: "https://api.orcarouter.ai/v1"
+      api_key_env: ORCAROUTER_API_KEY
+      model: "orcarouter/free"
+      priority: 6
   
 data:
   data_retention_days: 90

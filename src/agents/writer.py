@@ -2,8 +2,10 @@ from typing import Literal, Optional, List, Dict, Any, Tuple
 import os
 import json
 from pydantic import BaseModel, Field
-from langchain_openai import ChatOpenAI
-from langchain_core.messages import SystemMessage, HumanMessage, AIMessage, ToolMessage
+from langchain_core.messages import SystemMessage, HumanMessage
+from src.agents.llm_factory import load_providers, create_chat, invoke_llm, Provider, order_providers, mark_provider_failure, session_extra_body
+from src.utils.context import build_candidate_block, build_jd_section
+from src.utils.resume_parser import parse_master_resume
 
 class EditResumeTool(BaseModel):
     """Tool to edit draft resume JSON or master resume bank."""
@@ -108,21 +110,21 @@ class WriterAgent:
         model_name: str = "google/gemini-2.5-pro",
         openrouter_base_url: str = "https://openrouter.ai/api/v1",
         openrouter_api_key: str = None,
-        llm: Any = None
+        llm: Any = None,
+        providers: List[Provider] = None,
+        agent_name: str = "WriterAgent"
     ):
         self.model_name = model_name
         self.openrouter_base_url = openrouter_base_url
         self.openrouter_api_key = openrouter_api_key or os.environ.get("OPENROUTER_API_KEY")
+        self.agent_name = agent_name
+        self.providers = providers or load_providers()
+        self._llm_injected = llm is not None
         
         if llm is not None:
             self.llm = llm
-        elif self.openrouter_api_key:
-            self.llm = ChatOpenAI(
-                model=self.model_name,
-                api_key=self.openrouter_api_key,
-                base_url=self.openrouter_base_url,
-                temperature=0.2
-            )
+        elif self.providers:
+            self.llm = create_chat(self.providers[0], model=self.model_name if self.providers[0].name == "explicit" else None, temperature=0.2)
         else:
             self.llm = None
 
@@ -132,52 +134,104 @@ class WriterAgent:
         draft_data: dict,
         coverage_report: dict,
         master_resume_text: str = "",
-        max_turns: int = 4
+        max_turns: int = 4,
+        job_id: str = "",
+        agent_name: str = ""
     ) -> tuple[dict, dict]:
-        """Run one writer round until EmitPlanTool is emitted."""
+        """Run one writer round until EmitPlanTool is emitted. Fails over across providers."""
+        name = agent_name or self.agent_name
+        if self._llm_injected:
+            # Explicitly injected (mocked/legacy) LLM — no provider loop, no logging.
+            return self._run_round_with_llm(self.llm, jd_text, draft_data, coverage_report, master_resume_text, max_turns)
+        last_error = None
+        for provider in order_providers(self.providers):
+            try:
+                return self._run_round_with_llm(
+                    create_chat(provider, model=self.model_name if provider.name == "explicit" else None, temperature=0.2, extra_body=session_extra_body(provider, job_id)),
+                    jd_text, draft_data, coverage_report, master_resume_text, max_turns, provider, job_id, name
+                )
+            except Exception as e:
+                last_error = e
+                mark_provider_failure(provider)
+                print(f"[writer] Provider {provider.name} ({provider.model}) failed: {type(e).__name__}: {e}. Trying next provider...")
+        if last_error:
+            raise last_error
+        raise RuntimeError("No LLM providers configured for WriterAgent.")
+
+    def _run_round_with_llm(
+        self,
+        llm: Any,
+        jd_text: str,
+        draft_data: dict,
+        coverage_report: dict,
+        master_resume_text: str,
+        max_turns: int,
+        provider: Provider = None,
+        job_id: str = "",
+        agent_name: str = ""
+    ) -> tuple[dict, dict]:
+        """Run one writer round against a single LLM, logging every turn when a provider is known.
+
+        Each turn starts a FRESH conversation with the current draft state instead of
+        replaying tool-call history — avoids Gemini thought_signature errors on
+        multi-turn function calls and keeps token usage low (no history re-send).
+        """
         tools = [EditResumeTool, RequestHumanInputTool, EmitPlanTool]
-        llm_with_tools = self.llm.bind_tools(tools)
-        
-        user_prompt = (
-            f"Job Description:\n{jd_text}\n\n"
-            f"Current Draft JSON:\n{json.dumps(draft_data, indent=2)}\n\n"
-            f"Coverage Report:\n{json.dumps(coverage_report, indent=2)}\n\n"
-            f"Master Resume Bank:\n{master_resume_text}\n\n"
-            f"Please execute necessary EditResumeTool calls and finish with EmitPlanTool."
-        )
-        
-        messages = [
-            SystemMessage(content=WRITER_SYSTEM_PROMPT),
-            HumanMessage(content=user_prompt)
-        ]
-        
+        llm_with_tools = llm.bind_tools(tools)
+
+        try:
+            metadata, md_content = parse_master_resume("master_resume.md")
+            candidate_block = build_candidate_block(metadata.skills, metadata.preferences, md_content)
+        except Exception:
+            candidate_block = f"Master Resume Bank (only use bullets that exist here):\n{master_resume_text}"
+        jd_section = build_jd_section(jd_text)
+
+        def build_user_prompt(draft: dict) -> str:
+            pending = [
+                r for r in coverage_report.get("requirements", [])
+                if isinstance(r, dict) and r.get("route") in ("fix", "grill") and r.get("verdict") != "covered"
+            ]
+            report = {"requirements": pending, "summary": coverage_report.get("summary", "")}
+            return (
+                f"{candidate_block}\n\n"
+                f"{jd_section}\n\n"
+                f"Current Draft JSON:\n{json.dumps(draft, indent=2)}\n\n"
+                f"Remaining Coverage Requirements to fix:\n{json.dumps(report, indent=2)}\n\n"
+                f"Please execute necessary EditResumeTool calls and finish with EmitPlanTool."
+            )
+
         for turn in range(max_turns):
-            response = llm_with_tools.invoke(messages)
-            messages.append(response)
-            
+            messages = [
+                SystemMessage(content=WRITER_SYSTEM_PROMPT),
+                HumanMessage(content=build_user_prompt(draft_data))
+            ]
+            if provider is not None:
+                response = invoke_llm(llm_with_tools, messages, agent_name=agent_name, job_id=job_id, provider=provider.name, model=provider.model)
+            else:
+                response = llm_with_tools.invoke(messages)
+
             tool_calls = getattr(response, "tool_calls", [])
             if not tool_calls:
-                messages.append(HumanMessage(content="You did not call any tools. Please call EditResumeTool or EmitPlanTool."))
                 continue
-                
+
             emit_plan_call = next((tc for tc in tool_calls if tc.get("name") in ("EmitPlanTool", "emit_plan")), None)
-            
+
             # Execute any EditResumeTool calls first
             for tc in tool_calls:
                 tool_name = tc.get("name")
                 args = tc.get("args", {})
                 if isinstance(args, str):
                     args = json.loads(args)
-                    
+
                 if tool_name in ("EditResumeTool", "edit_resume"):
-                    edit_obj = EditResumeTool.model_validate(args)
-                    draft_data, status = execute_edit(edit_obj, draft_data)
-                    tool_call_id = tc.get("id", f"call_{turn}")
-                    messages.append(ToolMessage(tool_call_id=tool_call_id, content=status))
+                    try:
+                        edit_obj = EditResumeTool.model_validate(args)
+                        draft_data, status = execute_edit(edit_obj, draft_data)
+                    except Exception as e:
+                        print(f"[writer] Skipping invalid EditResumeTool call ({type(e).__name__}): {e}")
                 elif tool_name in ("RequestHumanInputTool", "request_human_input"):
-                    tool_call_id = tc.get("id", f"call_{turn}")
-                    messages.append(ToolMessage(tool_call_id=tool_call_id, content="Question recorded."))
-            
+                    pass  # Question recorded; human grilling is handled outside the loop.
+
             if emit_plan_call:
                 plan_args = emit_plan_call.get("args", {})
                 if isinstance(plan_args, str):

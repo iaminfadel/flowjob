@@ -3,6 +3,7 @@ from pydantic import BaseModel, Field
 from src.agents.structured_llm import LangChainStructuredAgent
 from src.utils.projection import project_resume_to_markdown
 from src.utils.resume_parser import parse_master_resume
+from src.utils.context import build_candidate_block, build_jd_section
 
 class RequirementCheck(BaseModel):
     requirement: str
@@ -21,14 +22,13 @@ CRITIC_PROMPT_TEMPLATE = """
 You are an expert technical interviewer and resume critic.
 Analyze the drafted resume against the target job description requirements and the master resume bullet bank.
 
-Job Description:
-{jd_text}
+{candidate_block}
+
+{jd_section}
 
 Draft Resume (Markdown):
 {draft_markdown}
-
-Master Resume Bullet Bank:
-{bank_bullets}
+{grilled_evidence}
 
 Instructions:
 1. Extract all key requirements and responsibilities from the Job Description.
@@ -40,18 +40,27 @@ Instructions:
    - route="fix": If missing or partially covered, and the master bullet bank contains evidence that can be added/swapped.
    - route="grill": If missing or partially covered, not in bank, but is a reasonable must-have requirement that candidate may have experience with to interview about.
    - route="drop": If optional, nice-to-have, or minor preference that should not block the application.
-4. If a critical MUST-HAVE requirement cannot be satisfied (e.g. candidate has 1 year experience for a role requiring 10+ years, or requires security clearance candidate cannot obtain), set unfixable=True.
+4. The EVIDENCE-GATHERED-FROM-HUMAN section lists requirements the candidate already answered during an interview. Treat those bullets as candidate-verified evidence: mark such requirements "covered" with route="drop" unless the draft still misses them.
+5. Do NOT infer experience length from graduation dates or education history alone. Judge experience by the evidence bullets in the draft.
+6. If a critical MUST-HAVE requirement cannot be satisfied (e.g. candidate has 1 year experience for a role requiring 10+ years, or requires security clearance candidate cannot obtain), set unfixable=True. Only set unfixable when evidence shows a true, non-fixable misalignment.
 """
 
 def critic_preprocessor(context: dict) -> dict:
     if "draft_markdown" not in context and "draft_data" in context:
         context["draft_markdown"] = project_resume_to_markdown(context["draft_data"])
-    if "bank_bullets" not in context:
-        try:
-            _, md_content = parse_master_resume(context.get("master_resume_path", "master_resume.md"))
-            context["bank_bullets"] = md_content
-        except Exception:
-            context["bank_bullets"] = ""
+    try:
+        metadata, md_content = parse_master_resume(context.get("master_resume_path", "master_resume.md"))
+    except Exception:
+        metadata, md_content = None, ""
+    context["candidate_block"] = build_candidate_block(
+        getattr(metadata, "skills", {}) if metadata else {}, getattr(metadata, "preferences", {}) if metadata else {}, md_content
+    )
+    context["jd_section"] = build_jd_section(context.get("jd_text", ""))
+    evidence = context.get("grilled_evidence", "")
+    if evidence:
+        context["grilled_evidence"] = "\n\nEVIDENCE-GATHERED-FROM-HUMAN (candidate-verified, trust these):\n" + evidence
+    else:
+        context["grilled_evidence"] = ""
     return context
 
 def CoverageCriticAgent(

@@ -210,7 +210,7 @@ def process_new_jobs(session, config, analyst_agent):
     for job in new_jobs:
         print(f"Analyzing job: {job.title} at {job.company}")
         def _step(j):
-            fit_score = analyst_agent.run({"jd_text": j.jd_text})
+            fit_score = analyst_agent.run({"jd_text": j.jd_text}, job_id=j.id, agent_name="AnalystAgent")
             print(f"Fit score: {fit_score.score} - Recommendation: {fit_score.recommendation}")
             j.fit_score = fit_score.score
             if fit_score.score >= min_fit_score:
@@ -233,7 +233,7 @@ def process_analyzed_jobs(session, tailor_agent, doc_generator=None):
         def _step(j):
             feedback = j.tailor_metadata.get("feedback") if j.tailor_metadata else None
             
-            tailored_resume = tailor_agent.run(jd_text=j.jd_text, feedback=feedback)
+            tailored_resume = tailor_agent.run(jd_text=j.jd_text, feedback=feedback, job_id=job.id, agent_name="TailorAgent")
             
             if hasattr(tailored_resume, "model_dump"):
                 draft_data = tailored_resume.model_dump()
@@ -302,12 +302,20 @@ def process_evidence_loop(session, critic_agent, writer_agent, config=None, doc_
             output_dir = os.path.join("data", "resumes", j.id)
             draft_data = load_draft_json(j.id)
             
+            # Surface candidate-verified grilling evidence to the critic so
+            # completed sessions are never re-flagged or marked unfixable.
+            grill_evidence_lines = []
+            for req, gap in (j.grilling_transcript or {}).get("gaps", {}).items():
+                if gap.get("status") == "completed" and gap.get("synthesized_bullet"):
+                    grill_evidence_lines.append(f"- {req}: {gap['synthesized_bullet']}")
+            
             for round_idx in range(max_rounds):
                 coverage_report = critic_agent.run({
                     "jd_text": j.jd_text,
                     "draft_data": draft_data,
-                    "master_resume_path": "master_resume.md"
-                })
+                    "master_resume_path": "master_resume.md",
+                    "grilled_evidence": "\n".join(grill_evidence_lines)
+                }, job_id=j.id, agent_name="CoverageCritic")
                 
                 if getattr(coverage_report, "unfixable", False):
                     print(f"Job {j.id} marked UNFIXABLE by critic.")
@@ -320,22 +328,31 @@ def process_evidence_loop(session, critic_agent, writer_agent, config=None, doc_
                 fix_routes = [r for r in reqs if getattr(r, "route", "") == "fix"]
                 
                 if grill_routes:
-                    print(f"Job {j.id} has {len(grill_routes)} gaps requiring evidence grilling.")
-                    j.state = JobState.NEEDS_EVIDENCE
-                    transcript_data = {
-                        "active_requirement": grill_routes[0].requirement,
-                        "gaps": {
-                            r.requirement: {
+                    # Respect completed/dropped grilling sessions: only park requirements
+                    # that are still pending evidence (transcript is the source of truth).
+                    transcript_gaps = (j.grilling_transcript or {}).get("gaps", {})
+                    pending_grills = [
+                        r for r in grill_routes
+                        if transcript_gaps.get(r.requirement, {}).get("status", "pending") not in ("completed", "dropped")
+                    ]
+                    if pending_grills:
+                        print(f"Job {j.id} has {len(pending_grills)} gaps requiring evidence grilling.")
+                        j.state = JobState.NEEDS_EVIDENCE
+                        merged_gaps = dict(transcript_gaps)
+                        for r in pending_grills:
+                            merged_gaps.setdefault(r.requirement, {
                                 "status": "pending",
                                 "turns": [],
                                 "must_have": getattr(r, "must_have", True)
-                            }
-                            for r in grill_routes
+                            })
+                        transcript_data = {
+                            "active_requirement": pending_grills[0].requirement,
+                            "gaps": merged_gaps
                         }
-                    }
-                    j.grilling_transcript = transcript_data
-                    notify_user("FlowJob Evidence Needed", f"Job {j.title} needs evidence: {grill_routes[0].requirement}")
-                    return
+                        j.grilling_transcript = transcript_data
+                        notify_user("FlowJob Evidence Needed", f"Job {j.title} needs evidence: {pending_grills[0].requirement}")
+                        return
+                    print(f"Job {j.id} grilling requirements already resolved (completed/dropped). Continuing.")
                     
                 if fix_routes:
                     print(f"Job {j.id} round {round_idx+1}: Writer applying fixes for {len(fix_routes)} requirements.")
@@ -343,7 +360,9 @@ def process_evidence_loop(session, critic_agent, writer_agent, config=None, doc_
                         jd_text=j.jd_text,
                         draft_data=draft_data,
                         coverage_report=coverage_report.model_dump() if hasattr(coverage_report, "model_dump") else coverage_report,
-                        master_resume_text=master_resume_text
+                        master_resume_text=master_resume_text,
+                        job_id=j.id,
+                        agent_name="Writer"
                     )
                     save_draft_json(j.id, draft_data)
                     edits = plan.get("edits", []) if isinstance(plan, dict) else getattr(plan, "edits", [])
@@ -389,7 +408,7 @@ def process_drafted_jobs(session, editor_agent, doc_generator=None):
                 pdf_path = generator.generate(draft_data, master_metadata, output_dir)
                 j.cv_path = pdf_path
                 
-            edit_score = editor_agent.run({"jd_text": j.jd_text, "pdf_path": pdf_path})
+            edit_score = editor_agent.run({"jd_text": j.jd_text, "pdf_path": pdf_path}, job_id=job.id, agent_name="EditorAgent")
             print(f"Editor score: {edit_score.score} - Passed: {edit_score.passed}")
             
             if edit_score.passed:

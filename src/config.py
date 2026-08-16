@@ -45,6 +45,7 @@ class LLMConfig(BaseModel):
     max_retries: int = 3
     openrouter_base_url: str = "https://openrouter.ai/api/v1"
     openrouter_api_key: str | None = None
+    providers: list[dict] = Field(default_factory=list)
 
 class DataConfig(BaseModel):
     data_retention_days: int = 90

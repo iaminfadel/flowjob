@@ -1,6 +1,7 @@
 import os
 from pydantic import BaseModel, Field
 from src.utils.resume_parser import get_safe_resume_data
+from src.utils.context import build_candidate_block, build_jd_section
 from src.utils.pdf_utils import extract_text_from_pdf
 from src.agents.structured_llm import LangChainStructuredAgent
 
@@ -13,11 +14,9 @@ EDITOR_PROMPT_TEMPLATE = """
 You are an expert QA Editor for technical resumes. 
 Your job is to audit the tailored resume against the Job Description and the candidate's original resume data.
 
-Job Description:
-{jd_text}
+{candidate_block}
 
-Candidate's Original Safe Resume Data:
-{safe_resume_json}
+{jd_section}
 
 Extracted Text from Tailored Resume PDF:
 {extracted_text}
@@ -33,7 +32,8 @@ Score the resume from 0 to 100. If the score is below 80, set passed=False and p
 def editor_preprocessor(context: dict) -> dict:
     context["extracted_text"] = extract_text_from_pdf(context["pdf_path"])
     safe_resume = get_safe_resume_data(context.get("resume_path", "master_resume.md"))
-    context["safe_resume_json"] = safe_resume.model_dump_json(indent=2)
+    context["candidate_block"] = build_candidate_block(safe_resume.skills, safe_resume.preferences, safe_resume.experience)
+    context["jd_section"] = build_jd_section(context.get("jd_text", ""))
     return context
 
 def EditorAgent(model_name: str = "google/gemini-2.5-pro", openrouter_base_url: str = "https://openrouter.ai/api/v1", openrouter_api_key: str = None) -> LangChainStructuredAgent:

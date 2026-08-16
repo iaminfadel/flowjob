@@ -3,7 +3,7 @@ from unittest.mock import patch, MagicMock
 from src.agents.editor import EditorAgent, EditorScore
 
 @patch.dict('os.environ', {'OPENROUTER_API_KEY': 'test_key'})
-@patch("src.agents.structured_llm.ChatOpenAI")
+@patch("src.agents.llm_factory.ChatOpenAI")
 def test_editor_agent(mock_chatopenai):
     agent = EditorAgent()
     agent.run = MagicMock(return_value=EditorScore(

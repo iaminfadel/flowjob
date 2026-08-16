@@ -130,9 +130,11 @@ def status(config: str = typer.Option("flowjob.yaml", help="Path to the configur
             return session.exec(statement).one()
 
         new_count = count_state(JobState.NEW)
+        analyzed_count = count_state(JobState.ANALYZED)
         drafted_count = count_state(JobState.DRAFTED)
         needs_evidence_count = count_state(JobState.NEEDS_EVIDENCE)
         unfixable_count = count_state(JobState.UNFIXABLE)
+        skipped_count = count_state(JobState.SKIPPED)
         applied_count = count_state(JobState.APPLIED)
         pending_count = count_state(JobState.PENDING_APPROVAL)
         failed_count = count_state(JobState.FAILED)
@@ -144,9 +146,11 @@ def status(config: str = typer.Option("flowjob.yaml", help="Path to the configur
 
     typer.echo("📊 FlowJob Status:")
     typer.echo(f"  NEW: {new_count}")
+    typer.echo(f"  ANALYZED: {analyzed_count}")
     typer.echo(f"  DRAFTED: {drafted_count}")
     typer.echo(f"  NEEDS_EVIDENCE: {needs_evidence_count}")
     typer.echo(f"  UNFIXABLE: {unfixable_count}")
+    typer.echo(f"  SKIPPED: {skipped_count}")
     typer.echo(f"  PENDING_APPROVAL: {pending_count}")
     typer.echo(f"  APPLIED: {applied_count}")
     typer.echo(f"  FAILED: {failed_count}")
@@ -209,13 +213,82 @@ def grill(
             
         grill_model = getattr(conf.grilling, "model", "google/gemini-2.5-pro")
         max_turns = getattr(conf.grilling, "max_turns_per_gap", 5)
+        from src.agents.llm_factory import load_providers
         run_grilling_session(
             session=session,
             job_id=job_id,
             interactive=True,
             model_name=grill_model,
-            max_turns_per_gap=max_turns
+            max_turns_per_gap=max_turns,
+            providers=load_providers()
         )
+
+@app.command()
+def logs(
+    job_id: str = typer.Option(None, help="Filter by job ID"),
+    agent: str = typer.Option(None, help="Filter by agent name"),
+    limit: int = typer.Option(30, help="Number of records to show"),
+    cost_summary: bool = typer.Option(False, "--cost", help="Show token/cost summary instead of records"),
+    config: str = typer.Option("flowjob.yaml", help="Path to the configuration file"),
+    raw: bool = typer.Option(False, help="Print full prompt/response text"),
+):
+    """Show persisted LLM request/response logs (every prompt, response, provider, cost)."""
+    from src.config import load_config
+    from src.db.store import init_db, get_session
+    from sqlmodel import select
+    from src.db.models import LLMInteraction
+
+    conf = load_config(config)
+    engine = init_db(conf.data.db_path)
+
+    with get_session(engine) as session:
+        statement = select(LLMInteraction)
+        if job_id:
+            statement = statement.where(LLMInteraction.job_id == job_id)
+        if agent:
+            statement = statement.where(LLMInteraction.agent_name == agent)
+
+        if cost_summary:
+            from sqlmodel import func
+            rows = session.exec(statement).all()
+            total_cost = sum(r.cost_usd for r in rows)
+            total_tokens = sum(r.prompt_tokens + r.completion_tokens for r in rows)
+            cached = sum(r.cached_tokens for r in rows)
+            failures = sum(1 for r in rows if not r.success)
+            by_provider: dict[str, dict] = {}
+            for r in rows:
+                p = by_provider.setdefault(r.provider or "?", {"calls": 0, "cost": 0.0, "tokens": 0, "cached": 0})
+                p["calls"] += 1
+                p["cost"] += r.cost_usd
+                p["tokens"] += r.prompt_tokens + r.completion_tokens
+                p["cached"] += r.cached_tokens
+            typer.echo(f"💸 LLM Spend Summary ({len(rows)} calls):")
+            typer.echo(f"  Total cost: ${total_cost:.6f}")
+            typer.echo(f"  Total tokens: {total_tokens} (cached: {cached})")
+            typer.echo(f"  Failures: {failures}")
+            typer.echo("  By provider:")
+            for name, p in sorted(by_provider.items(), key=lambda kv: -kv[1]["cost"]):
+                typer.echo(f"    {name}: {p['calls']} calls, ${p['cost']:.6f}, {p['tokens']} tokens, {p['cached']} cached")
+            return
+
+        statement = statement.order_by(LLMInteraction.id.desc()).limit(limit)
+        records = session.exec(statement).all()
+
+    if not records:
+        typer.echo("ℹ️ No LLM interactions logged yet. Run `flowjob run` first.")
+        return
+
+    typer.echo(f"📜 LLM Interaction Logs (last {len(records)}):")
+    for r in records:
+        status = "✅" if r.success else "❌"
+        cost = f"${r.cost_usd:.5f}" if r.cost_usd else "$0"
+        typer.echo(f"\n[{r.id}] {status} {r.timestamp} | {r.agent_name} | {r.provider}/{r.model} | job={r.job_id or '-'}")
+        typer.echo(f"    tokens: in={r.prompt_tokens} out={r.completion_tokens} cached={r.cached_tokens} | cost={cost} | {r.latency_ms}ms")
+        if not r.success:
+            typer.echo(f"    ERROR: {r.error[:200]}")
+        if raw:
+            typer.echo(f"    PROMPT: {r.prompt[:2000]}")
+            typer.echo(f"    RESPONSE: {r.response[:2000]}")
 
 if __name__ == "__main__":
     app()

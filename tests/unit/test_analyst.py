@@ -4,7 +4,7 @@ from src.agents.analyst import AnalystAgent
 from src.db.models import FitScore
 
 @patch.dict('os.environ', {'OPENROUTER_API_KEY': 'test_key'})
-@patch("src.agents.structured_llm.ChatOpenAI")
+@patch("src.agents.llm_factory.ChatOpenAI")
 def test_analyst_agent(mock_chatopenai):
     agent = AnalystAgent()
     agent.run = MagicMock(return_value=FitScore(
