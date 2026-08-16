@@ -33,7 +33,7 @@ skills:
 # 4. PREFERENCES & TARGET ROLES
 # This helps the Analyst agent filter out jobs that don't match your goals.
 preferences:
-  target_roles: ["Robotics", "Autonomous Systems", "Embedded", "Mechatronics"]
+  target_roles: ["Robotics", "Autonomous Systems", "Mechatronics"]
   avoid_roles: []
   work_types: []
   target_locations: ["Egypt"]
