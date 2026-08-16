@@ -1,13 +1,15 @@
 from sqlmodel import SQLModel, create_engine, Session
 
 def init_db(db_path: str):
-    """Initialize the SQLite database with the required schema."""
+    """Initialize the SQLite database with the required schema.
+
+    Creates missing tables only — never drops existing data.
+    """
     sqlite_url = f"sqlite:///{db_path}"
     engine = create_engine(sqlite_url)
     
-    # Create all tables
+    # Create all tables (idempotent; preserves existing rows)
     import src.db.models  # Ensure models are registered
-    SQLModel.metadata.drop_all(engine)
     SQLModel.metadata.create_all(engine)
     
     return engine
