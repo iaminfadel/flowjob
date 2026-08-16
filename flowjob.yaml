@@ -1,22 +1,44 @@
 scout:
-  search_queries: ["software engineer Egypt remote", "backend engineer Cairo"]
-  max_scrape_per_run: 30
+  max_scrape_per_run: 1
+  # time_filter: "past_24_hours"
   
 analyst:
-  min_fit_score: 70
+  model: "qwen/qwen3.8-27b"
+  min_fit_score: 50
+  
+tailor:
+  model: "qwen/qwen3.8-27b"
   
 editor:
+  model: "qwen/qwen3.8-27b"
   min_keyword_coverage: 75
-  
+
+critic:
+  model: "qwen/qwen3.8-27b"
+
+writer:
+  model: "qwen/qwen3.8-27b"
+  max_writer_rounds: 3
+
+grilling:
+  model: "qwen/qwen3.8-27b"
+  max_turns_per_gap: 5
+
+auditor:
+  model: "qwen/qwen3.8-27b"
+  max_attempts: 3
+
 applicator:
-  max_apps_per_day: 10
-  max_apps_per_hour: 1
+  max_apps_per_day: 100
+  max_apps_per_hour: 10
   dry_run: false
   require_approval: true
   
 llm:
+  default_model: "qwen/qwen3.8-27b"
   llm_timeout_seconds: 60
   max_retries: 3
+  openrouter_base_url: "https://api.orcarouter.ai/v1"
   
 data:
   data_retention_days: 90

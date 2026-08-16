@@ -15,7 +15,11 @@ browser_data/
 *.sqlite3
 
 # Flowjob specific
+data/
 output/
 test_output/
 .scratch/
 diff.txt
+*.log
+*.patch
+

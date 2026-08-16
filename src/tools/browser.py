@@ -26,7 +26,10 @@ def check_session_health() -> bool:
         )
         try:
             page = browser.pages[0] if browser.pages else browser.new_page()
-            page.goto("https://www.linkedin.com/", timeout=30000)
+            try:
+                page.goto("https://www.linkedin.com/", wait_until="domcontentloaded", timeout=45000)
+            except Exception:
+                pass
             
             # Fail fast on CAPTCHAs
             captcha_challenge = page.get_by_role("heading", name="security check", exact=False)
@@ -34,13 +37,19 @@ def check_session_health() -> bool:
                 print("❌ Pipeline paused! CAPTCHA detected.")
                 return False
 
-            # Check for profile nav item using Locator API
-            profile_nav = page.get_by_text("Me", exact=True)
+            # Check for profile nav item or feed redirect
             try:
-                profile_nav.wait_for(timeout=10000)
-                is_logged_in = profile_nav.is_visible()
+                # If logged in, LinkedIn typically redirects to /feed/
+                page.wait_for_url("**/feed/**", timeout=5000)
+                is_logged_in = True
             except Exception:
-                is_logged_in = False
+                try:
+                    # Fallback to checking the "Me" nav item
+                    profile_nav = page.get_by_text("Me", exact=True)
+                    profile_nav.wait_for(timeout=5000)
+                    is_logged_in = profile_nav.is_visible()
+                except Exception:
+                    is_logged_in = False
             
             if not is_logged_in:
                 print("❌ Pipeline paused! LinkedIn session is invalid. Please run `flowjob login`.")

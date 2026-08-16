@@ -35,6 +35,9 @@ def session():
     with Session(engine) as session:
         yield session
 
+@patch("src.pipeline.orchestrator.save_draft_json", return_value="fake_resume.json")
+@patch("src.pipeline.orchestrator.load_draft_json", return_value={"basics": {"name": "Test"}})
+@patch("src.pipeline.orchestrator.process_scout")
 @patch("src.pipeline.orchestrator.init_db")
 @patch("src.pipeline.orchestrator.get_session")
 @patch("src.tools.browser.check_session_health", return_value=True)
@@ -44,7 +47,7 @@ def session():
 @patch("src.utils.document_generator.PlaywrightDocumentGenerator")
 @patch("src.utils.resume_parser.parse_master_resume")
 def test_editor_retry_max_retries(
-    mock_parse, mock_docgen, mock_exists, mock_open, mock_yaml, mock_check, mock_get_session, mock_init_db, session
+    mock_parse, mock_docgen, mock_exists, mock_open, mock_yaml, mock_check, mock_get_session, mock_init_db, mock_scout, mock_load_draft, mock_save_draft, session
 ):
     mock_yaml.return_value = {"analyst": {"min_fit_score": 70}, "data": {"db_path": "memory"}}
     mock_get_session.return_value.__enter__.return_value = session
@@ -83,6 +86,7 @@ def test_editor_retry_max_retries(
     session.refresh(job)
     assert job.state == JobState.EDIT_FAIL
 
+@patch("src.pipeline.orchestrator.process_scout")
 @patch("src.pipeline.orchestrator.prompt_user_approval")
 @patch("src.pipeline.orchestrator.init_db")
 @patch("src.pipeline.orchestrator.get_session")
@@ -90,7 +94,7 @@ def test_editor_retry_max_retries(
 @patch("src.pipeline.orchestrator.yaml.safe_load")
 @patch("builtins.open")
 def test_approval_acceptance_invokes_applicator(
-    mock_open, mock_yaml, mock_check, mock_get_session, mock_init_db, mock_prompt, session
+    mock_open, mock_yaml, mock_check, mock_get_session, mock_init_db, mock_prompt, mock_scout, session
 ):
     mock_yaml.return_value = {"analyst": {"min_fit_score": 70}, "data": {"db_path": "memory"}}
     mock_get_session.return_value.__enter__.return_value = session
@@ -112,6 +116,7 @@ def test_approval_acceptance_invokes_applicator(
     assert job.state == JobState.APPLIED
     assert agents["applicator"].call_count == 1
 
+@patch("src.pipeline.orchestrator.process_scout")
 @patch("src.pipeline.orchestrator.prompt_user_approval")
 @patch("src.pipeline.orchestrator.init_db")
 @patch("src.pipeline.orchestrator.get_session")
@@ -119,7 +124,7 @@ def test_approval_acceptance_invokes_applicator(
 @patch("src.pipeline.orchestrator.yaml.safe_load")
 @patch("builtins.open")
 def test_approval_rejection_transitions_to_skipped(
-    mock_open, mock_yaml, mock_check, mock_get_session, mock_init_db, mock_prompt, session
+    mock_open, mock_yaml, mock_check, mock_get_session, mock_init_db, mock_prompt, mock_scout, session
 ):
     mock_yaml.return_value = {"analyst": {"min_fit_score": 70}, "data": {"db_path": "memory"}}
     mock_get_session.return_value.__enter__.return_value = session

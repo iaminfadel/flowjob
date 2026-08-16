@@ -1,8 +1,10 @@
 # FlowJob: Agentic Job Application Pipeline
-## Design Specification v1.1
+## Design Specification v1.2
 
-FlowJob is an automated, multi-agent pipeline built on the Google Antigravity SDK. It discovers job postings, analyzes fit, generates tailored resumes, runs editorial QA, and stages applications for human approval.
+FlowJob is an automated, multi-agent pipeline built on the Google Antigravity SDK. It discovers job postings, analyzes fit, generates tailored resumes, runs editorial QA, and stages applications for human approval. v1.2 adds the **agentic evidence loop**: when the draft can't prove a JD requirement, the pipeline asks the human for evidence via HITL grilling sessions instead of silently under-delivering.
 
+> **v1.2 changes from v1.1**: Agentic evidence loop added — per-run coverage critic, Tailor-as-Writer tool loop, HITL grilling sessions (interviewer), bank hygiene auditor gate, `NEEDS_EVIDENCE` / `UNFIXABLE` job states, yaml-configured round limits, `flowjob grill` and `flowjob audit-bank` commands. See §10.
+>
 > **v1.1 changes from v1.0**: Human approval gate added (C001), Checker Agent replaced with Editor Agent (C005), JobState machine added (C007), PII segmentation (C004), full error handling model (C008), and 11 additional mitigations from the concern register.
 
 ---
@@ -28,14 +30,22 @@ FlowJob uses a hybrid orchestration model: **deterministic Python code drives th
        │──────────────────────────► DROP (state = skipped)
        │ fit_score ≥ threshold
        ▼
-[Tailor Agent]
+[Tailor Agent] (initial structured draft, JSON only)
        │
        ▼
-[Editor Agent] ◄──────────────── feedback loop (max 1 retry)
-       │ pass
+[Evidence Loop] (see §10)
+       │ critic → writer fixes → re-critic (max_writer_rounds)
+       │ ├─ grill route (watch) → NEEDS_EVIDENCE (park + notify, no session)
+       │ ├─ grill route (run)   → [Grilling Session] (HITL, live)
+       │ └─ unfixable           → SKIP + notify (UNFIXABLE)
+       │ converged
        ▼
 [PDF Generator] (Playwright print-to-PDF + text extraction test)
        │
+       ▼
+[Editor Agent]
+       │ fail → back to ANALYZED (max 1 retry)
+       │ pass
        ▼
 [Human Approval Gate] ◄─── notify user via CLI / dashboard
        │ APPROVED
@@ -59,6 +69,8 @@ FlowJob uses the AGY SDK `every(seconds, callback)` trigger with **temporal jitt
 | `flowjob run` | One-shot pipeline run |
 | `flowjob run --url <url>` | Resume-only mode: skip Scout, process a user-supplied job URL |
 | `flowjob run --dry-run` | Full pipeline, no click/submit. Saves PDF + form answers to disk for inspection |
+| `flowjob grill <job_id> [--jog]` | Interactive HITL grilling session for one potential gap; `--jog` opens an open-ended memory-jog session. Job must be ANALYZED or NEEDS_EVIDENCE |
+| `flowjob audit-bank` | Read-only hygiene audit of all bank bullets: per-bullet pass/fail + reasons + suggested rewrites |
 | `flowjob validate` | Parse `master_resume.md`, verify YAML schema, check bracket tags, warn on empty sections |
 | `flowjob status` | Query SQLite and print application summary table |
 
@@ -132,6 +144,12 @@ NEW → ANALYZED → DRAFTED → EDITED → PENDING_APPROVAL → APPLIED
  │        └──SKIPPED │         └──EDIT_FAIL  └──REJECTED     │
  │                   └──TAILOR_FAIL                          │
  └─────────────────────────────────────────────── FAILED (dead-letter)
+
+Evidence loop (inside DRAFTED, see §10):
+DRAFTED → (critic → writer → re-critic) ──converged──► PDF → Editor → EDITED
+                                  ├──grill route──► NEEDS_EVIDENCE ──flowjob grill──► DRAFTED
+                                  ├──grill cap (must-have)──► UNFIXABLE (skip + notify)
+                                  └──unfixable────► UNFIXABLE (terminal, skip + notify)
 ```
 
 The orchestrator queries SQLite state on every wake-up. All transitions are persisted atomically — no in-memory state.
@@ -158,9 +176,8 @@ Each agent has its own `LocalAgentConfig`, system prompt, and custom tools. Agen
 
 ### 3.3 Tailor Agent
 - **Role**: The creative brain. Selects relevant bullets from Master Resume and writes a custom summary using `personal_nudge`.
-- **Tools**: `generate_cv_html(data, template) -> str`
+- **Output**: The initial tailored draft as structured JSON (`ResumeOutput`-compatible, §10.4). PDF/HTML generation is deferred until the evidence loop converges and is handled by the DocumentGenerator, not the Tailor agent.
 - **PII boundary**: Contact info is NOT passed to this agent. It generates the narrative content only. Contact fields are injected during PDF generation.
-- **Output**: CV HTML string.
 
 ### 3.4 Editor Agent *(replaces Checker Agent)*
 - **Role**: Quality gate, not ATS oracle. Validates the CV against verifiable criteria.
@@ -265,6 +282,20 @@ analyst:
 editor:
   min_keyword_coverage: 75     # trigger retry if below
 
+critic:
+  model: "qwen/qwen3.8-27b-free"    # evidence judge; falls back to llm.default_model
+
+writer:
+  max_writer_rounds: 3         # critic→writer→re-critic rounds before park/grill
+
+grilling:
+  model: "qwen/qwen3.8-27b-free"    # interviewer; falls back to llm.default_model
+  max_turns_per_gap: 5         # question turns per gap before drop/unfixable
+
+auditor:
+  model: "qwen/qwen3.8-27b-free"    # bank hygiene auditor; falls back to llm.default_model
+  max_attempts: 3              # re-audit attempts before human escalation
+
 applicator:
   max_apps_per_day: 10
   max_apps_per_hour: 1
@@ -299,6 +330,10 @@ flowjob/
 │   │   ├── scout.py
 │   │   ├── analyst.py
 │   │   ├── tailor.py
+│   │   ├── coverage_critic.py # per-run coverage critic (§10.3)
+│   │   ├── interviewer.py    # grilling session interviewer (§10.5)
+│   │   ├── auditor.py        # bank hygiene auditor (§10.6)
+│   │   ├── writer.py         # Tailor in tool-using role (§10.4)
 │   │   ├── editor.py
 │   │   └── applicator.py
 │   ├── tools/
@@ -328,6 +363,153 @@ flowjob/
 ├── pyproject.toml             # uv-managed, pins AGY SDK version
 └── README.md
 ```
+
+---
+
+## 10. Agentic Evidence Loop
+
+The evidence loop makes the pipeline **ask the human for proof** when the tailored draft can't demonstrate a JD requirement. It is deterministic in structure — an orchestrator-driven cycle of critic → writer → grilling — with the LLM confined to its judging, editing, and interviewing roles. Standing rule of this effort: agents never output whole documents — all writes go through tools (§10.4, §10.5).
+
+### 10.1 Overview
+
+```
+Initial draft (Tailor, structured JSON) ─┐
+                                         ▼
+┌─────────────── Evidence Loop ───────────────┐
+│  critic ──fix routes──► writer edits ─┐     │
+│    │                    ▲            │     │
+│    │                    └── re-critic │     │  max_writer_rounds
+│    ├──grill route──► NEEDS_EVIDENCE / grilling session (HITL)
+│    └──unfixable──► UNFIXABLE (skip + notify)
+└─────────────────────────────────────────────┘
+                         │ converged
+                         ▼
+                  PDF generation → Editor → EDITED
+```
+
+The loop runs **inside the `DRAFTED` state**, between the initial Tailor draft and the Editor gate. The Editor remains the final quality gate, unchanged (§3.4); the critic is a *semantic evidence judge* that coexists with it sequentially — critic at the front of the loop, Editor at the back.
+
+### 10.2 New job states
+
+| State | Meaning | Terminal? |
+|-------|---------|-----------|
+| `NEEDS_EVIDENCE` | Job parked awaiting a grilling session (a potential gap was found in watch mode) | No — resumes via `flowjob grill <job_id>` |
+| `UNFIXABLE` | Job skipped: critic judged the candidate genuinely unaligned with the job | Yes — skip + notify; distinct from `SKIPPED` (below fit threshold) |
+
+### 10.3 Per-run coverage critic
+
+The **evidence judge** for one job: a single semantic pass over JD + draft + bank that emits a coverage report with per-requirement routing.
+
+- **Inputs**: JD text, the tailored draft as a **plain-text projection of the structured JSON** (never the PDF; the projection is generated locally, no LLM), and the experience bank.
+- **Extraction**: `with_structured_output(method="function_calling")`. The critic is read-only (no tools), so the tool-hijack caveat from the tool-calling research does not apply.
+- **Checklist source**: both the JD requirements/qualifications **and** responsibilities sections; each item tagged **must-have** vs **nice-to-have**.
+- **Coverage rule**: substantive evidence — a draft bullet must *demonstrate* the requirement (action + result), not just mention the keyword.
+- **Verdicts**: `addressed` / `partial` (mentioned but not substantiated → fix route) / `unaddressed`.
+- **Routing** (per unaddressed/partial requirement): bank lookup is folded into this single semantic pass — no separate deterministic tags/keyword search stage (the earlier bank-search plan was superseded). Per requirement:
+  - bank supports it → **fix** (retrieval failure; writer edits with the found bullets)
+  - no bank support + plausible for the candidate → **grill** (potential gap)
+  - no bank support + implausible nice-to-have → **drop** (recorded in report, not grilled)
+  - any must-have with no bank support + implausible → job-level **unfixable** → skip + notify, no edits, no grilling
+- **No thresholds**: no score, no coverage %. The critic lists; the Editor gates.
+
+```python
+class RequirementCheck(BaseModel):
+    requirement: str
+    must_have: bool
+    verdict: Literal["addressed", "partial", "unaddressed"]
+    route: Literal["none", "fix", "grill", "drop"]   # drop = recorded, not grilled
+    support: list[str]     # bullet refs (bank or draft) as section+index paths
+    note: str
+
+class CoverageReport(BaseModel):
+    unfixable: bool        # job-level: skip + notify
+    requirements: list[RequirementCheck]
+```
+
+### 10.4 Writer loop (Tailor-as-Writer)
+
+The writer is **execution-only**: it never judges routing (critic-owned) and never re-judges unfixability. It drafts once (single structured output), then edits via tools.
+
+- **Draft artifact**: the structured JSON dict (ResumeOutput-compatible) is the per-job draft source of truth (`data/resumes/<job_id>/resume.json`). A local JSON→markdown projection gives the critic its plain-text input each round. The writer mutates the JSON via `edit_resume` (section+index refs matching the critic's `support` refs).
+- **Initial draft**: one structured output (the existing Tailor pass), no whole-resume re-emission thereafter.
+- **Loop shape**: critic → writer (executes all `fix` routes) → critic re-audit → repeat until no `fix` routes remain or `max_writer_rounds`. Early exit on a round with zero edits. `grill` routes are untouched by fixes and park the job.
+- **`request_human_input`**: exactly two triggers — (1) rounds exhausted without convergence (human gets: what was tried, what remains); (2) a fix that cannot be executed (invalid ref, or content that contradicts the draft).
+- **Grilling commit**: after the hygiene auditor passes a STAR bullet — commit **bank first, then draft**: `edit_resume(target: "bank", op: "add", tagged bullet)` appends to `master_resume.md`, then `edit_resume(target: "draft", op: "add")` places it.
+
+```python
+# Tool signatures — schema-as-final-tool loop (emit_plan always the final call)
+edit_resume(target: "draft"|"bank", op: "add"|"replace"|"remove",
+            section: str, index: int, tag: str = "", content: str)
+request_human_input(question: str, context: str)
+emit_plan(edits: list[dict], remaining: list[str],
+          needs_human: bool, summary: str)
+```
+
+One LLM invocation per round: 0..n `edit_resume` calls, optionally `request_human_input`, always `emit_plan` last. The orchestrator executes the calls locally and parses `emit_plan` to decide the next round.
+
+### 10.5 Grilling session (interviewer)
+
+An interactive **HITL** session, one potential gap per session, that converts the human's answers into a STAR bullet. The agent never stands in for the human's side.
+
+- **Turn 1**: show the JD requirement + why it's a potential gap + the first question, aimed at the **S/T** of STAR. Each subsequent turn: exactly **one question**, aimed at the missing STAR component (A or R), always asking for numbers. No question dumps. Context (JD requirement, gap, prior answers) is re-shown **only on resume**, not every turn.
+- **Session length**: `grilling.max_turns_per_gap` (default 5) per gap. On cap, or when the human reports no experience: nice-to-have → drop (recorded only); must-have → unfixable (skip + notify) — matching the critic's verdict vocabulary.
+- **Parking**: "don't remember / need to think" → park mid-session, resume later with the transcript intact.
+- **STAR conversion**: interviewer converts inline (no separate step) when S-T-A-R are all present or the human ends early. Condensed STAR, 1–2 lines, X-Y-Z framing, ≥1 quantified metric (follow-up for numbers; `~`/ranges/conservative estimates allowed). Always shows the converted bullet → one human confirmation turn → **hygiene auditor** → writer commits (bank, then draft).
+- **Manual trigger**: `flowjob grill <job_id>` after fit score (job `ANALYZED`), before the first draft. `--jog` = open-ended memory-jog ("what else didn't you mention?"), same session engine, different opening prompt. Jogged bullets land in the bank before the first draft.
+- **Deferred resume**: `flowjob grill <job_id>` on a `NEEDS_EVIDENCE` job picks up the **same gap** with the full transcript in context (no re-asking answered questions). Persistence via LangChain/LangGraph checkpointing to SQLite on the job — the datastore is the source of truth, never in-memory state. Turn cap counts per session-resume.
+
+### 10.6 Bank hygiene auditor
+
+The **evergreen, JD-independent** quality gate: verifies a bullet is well-written before it is committed to the bank. Runs after the grilling session converts + the human confirms, **before** the writer's bank commit.
+
+- **Criteria (all four must pass — binary, no score)**:
+  - **C1 Quantified** — ≥1 concrete metric (number, `%`, `~`, range, before→after).
+  - **C2 Active** — strong achievement verb opening; bans `responsible for`, `helped with`, `worked on`, `assisted`.
+  - **C3 Specific** — names the what (tech/tool/domain/outcome); no vague filler.
+  - **C4 Concise** — ≤2 lines.
+- **Mechanism (hybrid)**: deterministic fast-fail first — C1 (digit/%/~ regex), C4 (length), C2 (weak-verb regex) → immediate reject with concrete reasons, zero tokens. LLM structured judge (`with_structured_output`) only for the fuzzy residue: C3 specificity + overall verdict.
+- **Rejection behavior**: feedback loop to the interviewer (same session, facts unchanged) to revise wording, then re-audit, up to `auditor.max_attempts` (default 3). On exhaustion, escalate to the human (show bullet + `issues`): tweak manually, drop (recorded, not committed), or override. Never silently discard.
+
+```python
+class BulletCheck(BaseModel):
+    criterion: str   # "C1 Quantified" | "C2 Active" | "C3 Specific" | "C4 Concise"
+    passed: bool
+    note: str
+
+class BulletAudit(BaseModel):
+    passed: bool            # all-or-nothing across checks
+    checks: list[BulletCheck]
+    issues: list[str]       # concrete, agent/human-actionable rejection reasons
+
+class BankAuditReport(BaseModel):
+    audited: list[BulletAudit]
+    passed_count: int
+    failed_count: int
+```
+
+`flowjob audit-bank` runs the auditor over every bank bullet and prints a read-only report (pass/fail + reasons + suggested rewrites). It never modifies `master_resume.md`.
+
+### 10.7 Pipeline integration
+
+- **Slot**: a new `process_evidence_loop` orchestrator step replaces the single-shot draft→edit gap: `DRAFTED` → critic/writer loop → PDF generation → Editor → `EDITED`. Initial Tailor output is the structured JSON; PDF generation is deferred until the loop converges.
+- **Watch mode**: critic finds a grill route after the writer loop → job gets `NEEDS_EVIDENCE` + notification, and the pipeline continues to the next job (no blocking). Parked jobs are skipped until a grilling session resolves them.
+- **Run mode**: grill route reached → pipeline pauses and runs the grilling session interactively; on session end the loop continues with fresh bank evidence.
+- **Notification**: `notify_user(title, message)` helper wrapping the existing `notify-send` pattern (fallback to print when unavailable). Two call sites: `NEEDS_EVIDENCE` assignment — "FlowJob: evidence needed for {title} at {company} — run `flowjob grill <job_id>`" — and `UNFIXABLE` skip — "FlowJob: {title} at {company} skipped (unaligned)".
+- **Resume**: grilling success on a `NEEDS_EVIDENCE` job returns it to `DRAFTED`; the evidence loop re-runs with the new bank content.
+
+### 10.8 Configuration (new sections)
+
+The evidence-loop config sections are shown in the full `flowjob.yaml` example in §8 (critic, writer, grilling, auditor). Each agent's `model` falls back to `llm.default_model` when unset.
+
+The three round limits — `writer.max_writer_rounds`, `grilling.max_turns_per_gap`, `auditor.max_attempts` — are the only loop thresholds; the critic deliberately has none.
+
+### 10.9 New agents and files
+
+- `src/agents/coverage_critic.py` — per-run coverage critic (§10.3)
+- `src/agents/interviewer.py` — grilling session interviewer (§10.5)
+- `src/agents/auditor.py` — bank hygiene auditor (§10.6)
+- `src/agents/writer.py` — Tailor agent in its tool-using role (§10.4)
+- `flowjob status` counts extended with `NEEDS_EVIDENCE` / `UNFIXABLE`
 
 ---
 

@@ -41,3 +41,30 @@ def test_columns_read_writable(tmp_path):
         assert job.cv_path == "/path/to/cv.pdf"
         assert job.fit_score == 95
         assert job.edit_score == 85
+
+def test_job_state_enum():
+    assert JobState.NEEDS_EVIDENCE == "NEEDS_EVIDENCE"
+    assert JobState.UNFIXABLE == "UNFIXABLE"
+
+def test_job_grilling_transcript(tmp_path):
+    db_path = tmp_path / "test.db"
+    engine = init_db(str(db_path))
+    
+    job = Job(
+        id="124",
+        url="http://example.com/2",
+        title="Software Engineer 2",
+        company="Example Inc 2",
+        location="Remote",
+        posted_date="2023-01-01",
+        jd_text="Great job 2",
+        grilling_transcript={"active_requirement": "K8s", "gaps": {}}
+    )
+    
+    with Session(engine) as session:
+        session.add(job)
+        session.commit()
+        session.refresh(job)
+        
+        assert job.grilling_transcript == {"active_requirement": "K8s", "gaps": {}}
+

@@ -1,4 +1,5 @@
 import yaml
+import json
 import traceback
 from sqlmodel import select
 from src.db.store import init_db, get_session
@@ -11,6 +12,99 @@ from src.agents.runner import AgentRunner
 from datetime import datetime
 import os
 import subprocess
+import urllib.parse
+from src.agents.scout import scrape_linkedin_jobs
+from src.utils.resume_parser import parse_master_resume
+
+def save_draft_json(job_id: str, draft_data: dict, output_dir: str = "data/resumes") -> str:
+    dir_path = os.path.join(output_dir, job_id)
+    os.makedirs(dir_path, exist_ok=True)
+    file_path = os.path.join(dir_path, "resume.json")
+    with open(file_path, "w") as f:
+        json.dump(draft_data, f, indent=2)
+    return file_path
+
+def load_draft_json(job_id: str, output_dir: str = "data/resumes") -> dict:
+    file_path = os.path.join(output_dir, job_id, "resume.json")
+    if not os.path.exists(file_path):
+        return {}
+    with open(file_path, "r") as f:
+        return json.load(f)
+
+def process_scout(session, config, url=None):
+    print("Scouting for jobs...")
+    jobs = []
+    if url:
+        jobs = scrape_linkedin_jobs(url, max_jobs=1)
+    else:
+        scout_config = config.get("scout", {})
+        max_scrape = scout_config.get("max_scrape_per_run", 30)
+        time_filter = scout_config.get("time_filter", "any")
+        
+        time_map = {
+            "past_24_hours": "r86400",
+            "past_week": "r604800",
+            "past_month": "r2592000"
+        }
+        
+        # Dynamically build queries from master_resume.md
+        try:
+            metadata, _ = parse_master_resume("master_resume.md")
+            target_roles = metadata.preferences.get("target_roles", [])
+            work_types = metadata.preferences.get("work_types", [])
+            target_locations = metadata.preferences.get("target_locations", [])
+            
+            queries = []
+            for role in target_roles:
+                # Add location-based searches
+                for loc in target_locations:
+                    queries.append({"role": role, "location": loc, "wt": None})
+                
+                # Add remote/hybrid searches if specified
+                for wt in work_types:
+                    # For remote/hybrid, we usually don't want a specific country, 
+                    # or we could combine them. Let's just do a generic search with the work type.
+                    queries.append({"role": role, "location": "Worldwide", "wt": wt})
+                    
+            if not queries:
+                print("No target roles found in master_resume.md. Defaulting to generic search.")
+                queries = [{"role": "software engineer", "location": "Worldwide", "wt": None}]
+        except Exception as e:
+            print(f"Failed to parse master_resume.md for scout queries: {e}")
+            queries = [{"role": "software engineer", "location": "Worldwide", "wt": None}]
+        
+        for q in queries:
+            search_url = f"https://www.linkedin.com/jobs/search/?keywords={urllib.parse.quote(q['role'])}"
+            search_url += f"&location={urllib.parse.quote(q['location'])}"
+            
+            # Map work types to LinkedIn f_WT parameter
+            if q['wt']:
+                wt_lower = q['wt'].lower()
+                if "remote" in wt_lower:
+                    search_url += "&f_WT=2"
+                elif "hybrid" in wt_lower:
+                    search_url += "&f_WT=3"
+                elif "on-site" in wt_lower or "onsite" in wt_lower:
+                    search_url += "&f_WT=1"
+                    
+            # Force Easy Apply only!
+            search_url += "&f_AL=true"
+            
+            if time_filter in time_map:
+                search_url += f"&f_TPR={time_map[time_filter]}"
+                
+            jobs.extend(scrape_linkedin_jobs(search_url, max_jobs=max_scrape))
+            
+    # Insert jobs into db if not exists
+    new_jobs_added = 0
+    for j in jobs:
+        existing = session.get(Job, j.id)
+        if not existing:
+            session.add(j)
+            new_jobs_added += 1
+            
+    session.commit()
+    print(f"Scout found {len(jobs)} jobs. {new_jobs_added} are new and added to DB.")
 
 def log_job_error(session, agent_name: str, error: Exception, job_id: str) -> int:
     statement = select(ErrorRecord).where(ErrorRecord.job_id == job_id)
@@ -118,6 +212,7 @@ def process_new_jobs(session, config, analyst_agent):
         def _step(j):
             fit_score = analyst_agent.run({"jd_text": j.jd_text})
             print(f"Fit score: {fit_score.score} - Recommendation: {fit_score.recommendation}")
+            j.fit_score = fit_score.score
             if fit_score.score >= min_fit_score:
                 j.state = JobState.ANALYZED
                 print(f"Job {j.id} passed fit threshold. State -> ANALYZED")
@@ -133,42 +228,166 @@ def process_analyzed_jobs(session, tailor_agent, doc_generator=None):
     
     print(f"Found {len(analyzed_jobs)} ANALYZED jobs.")
     
-    from src.utils.document_generator import PlaywrightDocumentGenerator
-    from src.utils.resume_parser import parse_master_resume
-    
-    if analyzed_jobs:
-        master_metadata, _ = parse_master_resume("master_resume.md")
-        if doc_generator is None:
-            doc_generator = PlaywrightDocumentGenerator()
-    
     for job in analyzed_jobs:
         print(f"Tailoring resume for job: {job.title} at {job.company}")
         def _step(j):
-            output_dir = os.path.join("data", "resumes", j.id)
             feedback = j.tailor_metadata.get("feedback") if j.tailor_metadata else None
             
             tailored_resume = tailor_agent.run(jd_text=j.jd_text, feedback=feedback)
             
-            pdf_path = doc_generator.generate(tailored_resume, master_metadata, output_dir)
+            if hasattr(tailored_resume, "model_dump"):
+                draft_data = tailored_resume.model_dump()
+            elif isinstance(tailored_resume, dict):
+                draft_data = tailored_resume
+            else:
+                draft_data = {"content": str(tailored_resume)}
+
+            json_path = save_draft_json(j.id, draft_data)
             
-            print(f"Generated tailored resume PDF: {pdf_path}")
-            j.cv_path = pdf_path
+            print(f"Generated tailored resume JSON: {json_path}")
+            j.cv_path = json_path
             j.state = JobState.DRAFTED
         if not run_agent_step(session, "TailorAgent", job, JobState.TAILOR_FAIL, _step):
             break
 
-def process_drafted_jobs(session, editor_agent):
+def notify_user(title: str, message: str):
+    try:
+        subprocess.run(["notify-send", title, message], check=False)
+    except Exception:
+        print(f"[NOTIFICATION] {title}: {message}")
+
+def prompt_user_approval(job) -> bool:
+    print(f"Prompting user for job: {job.title} at {job.company}")
+    notify_user("FlowJob: Job ready for approval!", f"{job.title} at {job.company}")
+    try:
+        response = input("Do you approve applying to this job? (y/n): ")
+        return response.strip().lower() == "y"
+    except (EOFError, KeyboardInterrupt):
+        return False
+
+def process_evidence_loop(session, critic_agent, writer_agent, config=None, doc_generator=None, interactive=False):
+    statement = select(Job).where(Job.state == JobState.DRAFTED)
+    drafted_jobs = session.exec(statement).all()
+    
+    if not drafted_jobs:
+        return
+        
+    print(f"Found {len(drafted_jobs)} DRAFTED jobs in evidence loop.")
+    
+    from src.utils.document_generator import PlaywrightDocumentGenerator
+    from src.utils.resume_parser import parse_master_resume
+    
+    master_metadata = None
+    master_resume_text = ""
+    try:
+        master_metadata, master_resume_text = parse_master_resume("master_resume.md")
+    except Exception:
+        pass
+        
+    max_rounds = 3
+    if config:
+        writer_cfg = config.get("writer", {})
+        if isinstance(writer_cfg, dict):
+            max_rounds = writer_cfg.get("max_writer_rounds", 3)
+        elif hasattr(writer_cfg, "max_writer_rounds"):
+            max_rounds = writer_cfg.max_writer_rounds
+
+    for job in drafted_jobs:
+        # If job already has a generated PDF, evidence loop already converged for this draft
+        if job.cv_path and job.cv_path.endswith(".pdf") and os.path.exists(job.cv_path):
+            continue
+            
+        print(f"Running evidence loop for job: {job.title} at {job.company}")
+        def _step(j):
+            output_dir = os.path.join("data", "resumes", j.id)
+            draft_data = load_draft_json(j.id)
+            
+            for round_idx in range(max_rounds):
+                coverage_report = critic_agent.run({
+                    "jd_text": j.jd_text,
+                    "draft_data": draft_data,
+                    "master_resume_path": "master_resume.md"
+                })
+                
+                if getattr(coverage_report, "unfixable", False):
+                    print(f"Job {j.id} marked UNFIXABLE by critic.")
+                    j.state = JobState.UNFIXABLE
+                    notify_user("FlowJob", f"Job {j.title} at {j.company} marked UNFIXABLE")
+                    return
+                    
+                reqs = getattr(coverage_report, "requirements", [])
+                grill_routes = [r for r in reqs if getattr(r, "route", "") == "grill"]
+                fix_routes = [r for r in reqs if getattr(r, "route", "") == "fix"]
+                
+                if grill_routes:
+                    print(f"Job {j.id} has {len(grill_routes)} gaps requiring evidence grilling.")
+                    j.state = JobState.NEEDS_EVIDENCE
+                    transcript_data = {
+                        "active_requirement": grill_routes[0].requirement,
+                        "gaps": {
+                            r.requirement: {
+                                "status": "pending",
+                                "turns": [],
+                                "must_have": getattr(r, "must_have", True)
+                            }
+                            for r in grill_routes
+                        }
+                    }
+                    j.grilling_transcript = transcript_data
+                    notify_user("FlowJob Evidence Needed", f"Job {j.title} needs evidence: {grill_routes[0].requirement}")
+                    return
+                    
+                if fix_routes:
+                    print(f"Job {j.id} round {round_idx+1}: Writer applying fixes for {len(fix_routes)} requirements.")
+                    draft_data, plan = writer_agent.run_round(
+                        jd_text=j.jd_text,
+                        draft_data=draft_data,
+                        coverage_report=coverage_report.model_dump() if hasattr(coverage_report, "model_dump") else coverage_report,
+                        master_resume_text=master_resume_text
+                    )
+                    save_draft_json(j.id, draft_data)
+                    edits = plan.get("edits", []) if isinstance(plan, dict) else getattr(plan, "edits", [])
+                    if not edits:
+                        print("Writer made 0 edits; converging early.")
+                        break
+                else:
+                    # No grill routes and no fix routes -> converged!
+                    print(f"Job {j.id} evidence loop converged!")
+                    break
+                    
+            # Generate PDF upon convergence
+            generator = doc_generator if doc_generator is not None else PlaywrightDocumentGenerator()
+            pdf_path = generator.generate(draft_data, master_metadata, output_dir)
+            j.cv_path = pdf_path
+            print(f"Generated PDF for converged draft: {pdf_path}")
+            
+        if not run_agent_step(session, "EvidenceLoop", job, JobState.TAILOR_FAIL, _step):
+            break
+
+def process_drafted_jobs(session, editor_agent, doc_generator=None):
     statement = select(Job).where(Job.state == JobState.DRAFTED)
     drafted_jobs = session.exec(statement).all()
     
     print(f"Found {len(drafted_jobs)} DRAFTED jobs.")
     
+    from src.utils.document_generator import PlaywrightDocumentGenerator
+    from src.utils.resume_parser import parse_master_resume
+    
     for job in drafted_jobs:
         print(f"Editing resume for job: {job.title} at {job.company}")
         def _step(j):
-            pdf_path = j.cv_path if j.cv_path else os.path.join("data", "resumes", j.id, "resume.pdf")
+            output_dir = os.path.join("data", "resumes", j.id)
+            pdf_path = os.path.join(output_dir, "resume.pdf") if (not j.cv_path or not j.cv_path.endswith(".pdf")) else j.cv_path
+            
             if not os.path.exists(pdf_path):
-                raise FileNotFoundError(f"PDF not found at {pdf_path}")
+                draft_data = load_draft_json(j.id)
+                try:
+                    master_metadata, _ = parse_master_resume("master_resume.md")
+                except Exception:
+                    master_metadata = None
+                generator = doc_generator if doc_generator is not None else PlaywrightDocumentGenerator()
+                pdf_path = generator.generate(draft_data, master_metadata, output_dir)
+                j.cv_path = pdf_path
                 
             edit_score = editor_agent.run({"jd_text": j.jd_text, "pdf_path": pdf_path})
             print(f"Editor score: {edit_score.score} - Passed: {edit_score.passed}")
@@ -239,10 +458,13 @@ def run_pipeline(agents: dict, url: str = None, dry_run: bool = False, doc_gener
     engine = init_db(db_path)
     
     with get_session(engine) as session:
+        process_scout(session, config, url)
         process_retries(session)
         process_new_jobs(session, config, agents["analyst"])
         process_analyzed_jobs(session, agents["tailor"], doc_generator)
-        process_drafted_jobs(session, agents["editor"])
+        if "critic" in agents and "writer" in agents:
+            process_evidence_loop(session, agents["critic"], agents["writer"], config, doc_generator)
+        process_drafted_jobs(session, agents["editor"], doc_generator)
         process_edited_jobs(session)
         
         if not dry_run:

@@ -1,0 +1,342 @@
+<mxGraphModel adaptiveColors="auto" dx="1200" dy="760" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="2600" pageHeight="1480" math="0" shadow="0">
+  <root>
+    <mxCell id="0"/>
+    <mxCell id="1" parent="0"/>
+    <mxCell id="title" value="&lt;b&gt;FlowJob System Map&lt;/b&gt; — isometric view of the agentic job-application pipeline" style="text;html=1;fontSize=20;fontStyle=1;fontColor=#333333;align=left;" vertex="1" parent="1">
+      <mxGeometry x="30" y="0" width="900" height="28" as="geometry"/>
+    </mxCell>
+
+    <mxCell id="p_cfg" value="" style="shape=isoRectangle;isoAngle=15;html=1;fillColor=#f6f6f6;strokeColor=#d8d8d8;strokeWidth=1;" vertex="1" parent="1">
+      <mxGeometry x="20" y="85" width="174" height="84" as="geometry"/>
+    </mxCell>
+    <mxCell id="p_resume" value="" style="shape=isoRectangle;isoAngle=15;html=1;fillColor=#f6f6f6;strokeColor=#d8d8d8;strokeWidth=1;" vertex="1" parent="1">
+      <mxGeometry x="20" y="305" width="174" height="84" as="geometry"/>
+    </mxCell>
+    <mxCell id="p_cli" value="" style="shape=isoRectangle;isoAngle=15;html=1;fillColor=#f6f6f6;strokeColor=#d8d8d8;strokeWidth=1;" vertex="1" parent="1">
+      <mxGeometry x="20" y="525" width="174" height="84" as="geometry"/>
+    </mxCell>
+    <mxCell id="p_probe" value="" style="shape=isoRectangle;isoAngle=15;html=1;fillColor=#f6f6f6;strokeColor=#d8d8d8;strokeWidth=1;" vertex="1" parent="1">
+      <mxGeometry x="320" y="95" width="174" height="84" as="geometry"/>
+    </mxCell>
+    <mxCell id="p_orch" value="" style="shape=isoRectangle;isoAngle=15;html=1;fillColor=#f6f6f6;strokeColor=#d8d8d8;strokeWidth=1;" vertex="1" parent="1">
+      <mxGeometry x="288" y="315" width="244" height="104" as="geometry"/>
+    </mxCell>
+    <mxCell id="p_scout" value="" style="shape=isoRectangle;isoAngle=15;html=1;fillColor=#f6f6f6;strokeColor=#d8d8d8;strokeWidth=1;" vertex="1" parent="1">
+      <mxGeometry x="598" y="100" width="184" height="89" as="geometry"/>
+    </mxCell>
+    <mxCell id="p_vault" value="" style="shape=isoRectangle;isoAngle=15;html=1;fillColor=#f6f6f6;strokeColor=#d8d8d8;strokeWidth=1;" vertex="1" parent="1">
+      <mxGeometry x="608" y="390" width="184" height="89" as="geometry"/>
+    </mxCell>
+    <mxCell id="p_analyst" value="" style="shape=isoRectangle;isoAngle=15;html=1;fillColor=#f6f6f6;strokeColor=#d8d8d8;strokeWidth=1;" vertex="1" parent="1">
+      <mxGeometry x="888" y="100" width="174" height="84" as="geometry"/>
+    </mxCell>
+    <mxCell id="p_tailor" value="" style="shape=isoRectangle;isoAngle=15;html=1;fillColor=#f6f6f6;strokeColor=#d8d8d8;strokeWidth=1;" vertex="1" parent="1">
+      <mxGeometry x="888" y="340" width="174" height="84" as="geometry"/>
+    </mxCell>
+    <mxCell id="p_editor" value="" style="shape=isoRectangle;isoAngle=15;html=1;fillColor=#f6f6f6;strokeColor=#d8d8d8;strokeWidth=1;" vertex="1" parent="1">
+      <mxGeometry x="888" y="580" width="174" height="84" as="geometry"/>
+    </mxCell>
+    <mxCell id="p_doc" value="" style="shape=isoRectangle;isoAngle=15;html=1;fillColor=#f6f6f6;strokeColor=#d8d8d8;strokeWidth=1;" vertex="1" parent="1">
+      <mxGeometry x="1176" y="370" width="218" height="94" as="geometry"/>
+    </mxCell>
+    <mxCell id="p_human" value="" style="shape=isoRectangle;isoAngle=15;html=1;fillColor=#f6f6f6;strokeColor=#d8d8d8;strokeWidth=1;" vertex="1" parent="1">
+      <mxGeometry x="1178" y="620" width="174" height="84" as="geometry"/>
+    </mxCell>
+    <mxCell id="p_app" value="" style="shape=isoRectangle;isoAngle=15;html=1;fillColor=#f6f6f6;strokeColor=#d8d8d8;strokeWidth=1;" vertex="1" parent="1">
+      <mxGeometry x="1468" y="490" width="184" height="89" as="geometry"/>
+    </mxCell>
+    <mxCell id="p_llm" value="" style="shape=isoRectangle;isoAngle=15;html=1;fillColor=#f6f6f6;strokeColor=#d8d8d8;strokeWidth=1;" vertex="1" parent="1">
+      <mxGeometry x="1468" y="115" width="248" height="104" as="geometry"/>
+    </mxCell>
+    <mxCell id="p_linkedin" value="" style="shape=isoRectangle;isoAngle=15;html=1;fillColor=#f6f6f6;strokeColor=#d8d8d8;strokeWidth=1;" vertex="1" parent="1">
+      <mxGeometry x="1736" y="455" width="248" height="104" as="geometry"/>
+    </mxCell>
+
+    <mxCell id="b_cfg" value="&lt;b&gt;Config House&lt;/b&gt;&lt;br&gt;limits · models · thresholds&lt;br&gt;&lt;font size=&quot;9&quot; color=&quot;#555555&quot;&gt;flowjob.yaml&lt;/font&gt;" style="shape=isoCube;isoAngle=15;size=28;html=1;whiteSpace=wrap;verticalAlign=top;fillColor=#eeeeee;strokeColor=#808080;fontColor=#333333;fontSize=10;" vertex="1" parent="1">
+      <mxGeometry x="30" y="30" width="150" height="60" as="geometry"/>
+    </mxCell>
+    <mxCell id="b_resume" value="&lt;b&gt;Master Resume&lt;/b&gt;&lt;br&gt;YAML frontmatter + tagged bullets&lt;br&gt;&lt;font size=&quot;9&quot; color=&quot;#555555&quot;&gt;master_resume.md · resume_parser.py&lt;/font&gt;" style="shape=isoCube;isoAngle=15;size=48;html=1;whiteSpace=wrap;verticalAlign=top;fillColor=#d5e8d4;strokeColor=#82b366;fontColor=#333333;fontSize=10;" vertex="1" parent="1">
+      <mxGeometry x="30" y="250" width="150" height="60" as="geometry"/>
+    </mxCell>
+    <mxCell id="b_cli" value="&lt;b&gt;CLI Control Tower&lt;/b&gt;&lt;br&gt;validate · login · run · watch · status&lt;br&gt;&lt;font size=&quot;9&quot; color=&quot;#555555&quot;&gt;src/cli.py&lt;/font&gt;" style="shape=isoCube;isoAngle=15;size=70;html=1;whiteSpace=wrap;verticalAlign=top;fillColor=#dae8fc;strokeColor=#6c8ebf;fontColor=#333333;fontSize=10;" vertex="1" parent="1">
+      <mxGeometry x="30" y="470" width="150" height="60" as="geometry"/>
+    </mxCell>
+    <mxCell id="b_probe" value="&lt;b&gt;Session Guard&lt;/b&gt;&lt;br&gt;LinkedIn health + CAPTCHA check&lt;br&gt;&lt;font size=&quot;9&quot; color=&quot;#555555&quot;&gt;src/tools/browser.py:19-60&lt;/font&gt;" style="shape=isoCube;isoAngle=15;size=25;html=1;whiteSpace=wrap;verticalAlign=top;fillColor=#f8cecc;strokeColor=#b85450;fontColor=#333333;fontSize=10;" vertex="1" parent="1">
+      <mxGeometry x="330" y="40" width="150" height="60" as="geometry"/>
+    </mxCell>
+    <mxCell id="b_orch" value="&lt;b&gt;Orchestrator HQ&lt;/b&gt;&lt;br&gt;deterministic conductor · JobState machine&lt;br&gt;&lt;font size=&quot;9&quot; color=&quot;#555555&quot;&gt;src/pipeline/orchestrator.py&lt;/font&gt;" style="shape=isoCube;isoAngle=15;size=58;html=1;whiteSpace=wrap;verticalAlign=top;fillColor=#dae8fc;strokeColor=#6c8ebf;fontColor=#333333;fontSize=10;" vertex="1" parent="1">
+      <mxGeometry x="300" y="250" width="220" height="80" as="geometry"/>
+    </mxCell>
+    <mxCell id="b_scout" value="&lt;b&gt;Scout Watchtower&lt;/b&gt;&lt;br&gt;Playwright scraper · Easy Apply queries&lt;br&gt;&lt;font size=&quot;9&quot; color=&quot;#555555&quot;&gt;src/agents/scout.py&lt;/font&gt;" style="shape=isoCube;isoAngle=15;size=75;html=1;whiteSpace=wrap;verticalAlign=top;fillColor=#d5e8d4;strokeColor=#82b366;fontColor=#333333;fontSize=10;" vertex="1" parent="1">
+      <mxGeometry x="610" y="40" width="160" height="65" as="geometry"/>
+    </mxCell>
+    <mxCell id="b_vault" value="&lt;b&gt;Data Vault&lt;/b&gt;&lt;br&gt;SQLite · jobs · errors · runs&lt;br&gt;&lt;font size=&quot;9&quot; color=&quot;#555555&quot;&gt;src/db/models.py · store.py&lt;/font&gt;" style="shape=isoCube;isoAngle=15;size=52;html=1;whiteSpace=wrap;verticalAlign=top;fillColor=#fff2cc;strokeColor=#d6b656;fontColor=#333333;fontSize=10;" vertex="1" parent="1">
+      <mxGeometry x="620" y="330" width="160" height="65" as="geometry"/>
+    </mxCell>
+    <mxCell id="b_analyst" value="&lt;b&gt;Analyst Tower&lt;/b&gt;&lt;br&gt;fit scoring → FitScore&lt;br&gt;&lt;font size=&quot;9&quot; color=&quot;#555555&quot;&gt;src/agents/analyst.py&lt;/font&gt;" style="shape=isoCube;isoAngle=15;size=64;html=1;whiteSpace=wrap;verticalAlign=top;fillColor=#d5e8d4;strokeColor=#82b366;fontColor=#333333;fontSize=10;" vertex="1" parent="1">
+      <mxGeometry x="900" y="40" width="150" height="60" as="geometry"/>
+    </mxCell>
+    <mxCell id="b_tailor" value="&lt;b&gt;Tailor Workshop&lt;/b&gt;&lt;br&gt;JD + safe resume → JSON Resume&lt;br&gt;&lt;font size=&quot;9&quot; color=&quot;#555555&quot;&gt;src/agents/tailor.py&lt;/font&gt;" style="shape=isoCube;isoAngle=15;size=50;html=1;whiteSpace=wrap;verticalAlign=top;fillColor=#d5e8d4;strokeColor=#82b366;fontColor=#333333;fontSize=10;" vertex="1" parent="1">
+      <mxGeometry x="900" y="280" width="150" height="60" as="geometry"/>
+    </mxCell>
+    <mxCell id="b_editor" value="&lt;b&gt;Editor QA Lab&lt;/b&gt;&lt;br&gt;keyword coverage · fact-check · tone&lt;br&gt;&lt;font size=&quot;9&quot; color=&quot;#555555&quot;&gt;src/agents/editor.py&lt;/font&gt;" style="shape=isoCube;isoAngle=15;size=46;html=1;whiteSpace=wrap;verticalAlign=top;fillColor=#d5e8d4;strokeColor=#82b366;fontColor=#333333;fontSize=10;" vertex="1" parent="1">
+      <mxGeometry x="900" y="520" width="150" height="60" as="geometry"/>
+    </mxCell>
+    <mxCell id="b_doc" value="&lt;b&gt;Document Factory&lt;/b&gt;&lt;br&gt;Jinja2 HTML → PDF → ATS check&lt;br&gt;&lt;font size=&quot;9&quot; color=&quot;#555555&quot;&gt;src/utils/document_generator.py&lt;/font&gt;" style="shape=isoCube;isoAngle=15;size=42;html=1;whiteSpace=wrap;verticalAlign=top;fillColor=#e1d5e7;strokeColor=#9673a6;fontColor=#333333;fontSize=10;" vertex="1" parent="1">
+      <mxGeometry x="1190" y="300" width="190" height="70" as="geometry"/>
+    </mxCell>
+    <mxCell id="b_human" value="&lt;b&gt;Human Gate&lt;/b&gt;&lt;br&gt;notify-send + CLI y/N approval&lt;br&gt;&lt;font size=&quot;9&quot; color=&quot;#555555&quot;&gt;orchestrator.py:149-157&lt;/font&gt;" style="shape=isoCube;isoAngle=15;size=34;html=1;whiteSpace=wrap;verticalAlign=top;fillColor=#ffe6cc;strokeColor=#d79b00;fontColor=#333333;fontSize=10;" vertex="1" parent="1">
+      <mxGeometry x="1190" y="560" width="150" height="60" as="geometry"/>
+    </mxCell>
+    <mxCell id="b_app" value="&lt;b&gt;Applicator Garage&lt;/b&gt;&lt;br&gt;Easy Apply bot · jitter · human fallback&lt;br&gt;&lt;font size=&quot;9&quot; color=&quot;#555555&quot;&gt;src/agents/applicator.py&lt;/font&gt;" style="shape=isoCube;isoAngle=15;size=54;html=1;whiteSpace=wrap;verticalAlign=top;fillColor=#d5e8d4;strokeColor=#82b366;fontColor=#333333;fontSize=10;" vertex="1" parent="1">
+      <mxGeometry x="1480" y="430" width="160" height="65" as="geometry"/>
+    </mxCell>
+    <mxCell id="b_llm" value="&lt;b&gt;LLM Cloud&lt;/b&gt;&lt;br&gt;Gemini · structured output · 60s timeout&lt;br&gt;&lt;font size=&quot;9&quot; color=&quot;#555555&quot;&gt;src/agents/structured_llm.py&lt;/font&gt;" style="shape=isoCube;isoAngle=15;size=40;html=1;whiteSpace=wrap;verticalAlign=top;fillColor=#e6e6e6;strokeColor=#888888;fontColor=#333333;fontSize=10;" vertex="1" parent="1">
+      <mxGeometry x="1480" y="40" width="220" height="80" as="geometry"/>
+    </mxCell>
+    <mxCell id="b_linkedin" value="&lt;b&gt;LinkedIn City&lt;/b&gt;&lt;br&gt;job search · Easy Apply forms · CAPTCHA risk&lt;br&gt;&lt;font size=&quot;9&quot; color=&quot;#555555&quot;&gt;external · browser_data/ session&lt;/font&gt;" style="shape=isoCube;isoAngle=15;size=60;html=1;whiteSpace=wrap;verticalAlign=top;fillColor=#e6e6e6;strokeColor=#888888;fontColor=#333333;fontSize=10;" vertex="1" parent="1">
+      <mxGeometry x="1750" y="380" width="220" height="80" as="geometry"/>
+    </mxCell>
+
+    <mxCell id="e1" value="spawn pipeline · build agents" style="edgeStyle=isometricEdgeStyle;html=1;rounded=0;strokeColor=#444444;strokeWidth=1.5;fontSize=9;endArrow=classic;fontColor=#333333;" edge="1" parent="1" source="b_cli" target="b_orch">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+    <mxCell id="e2" value="limits · models · thresholds" style="edgeStyle=isometricEdgeStyle;html=1;rounded=0;strokeColor=#444444;strokeWidth=1.5;fontSize=9;endArrow=classic;fontColor=#333333;" edge="1" parent="1" source="b_cfg" target="b_orch">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+    <mxCell id="e3" value="target_roles · locations · work_types" style="edgeStyle=isometricEdgeStyle;html=1;rounded=0;strokeColor=#444444;strokeWidth=1.5;fontSize=9;endArrow=classic;fontColor=#333333;" edge="1" parent="1" source="b_resume" target="b_scout">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+    <mxCell id="e4" value="safe resume (no PII)" style="edgeStyle=isometricEdgeStyle;html=1;rounded=0;strokeColor=#444444;strokeWidth=1.5;fontSize=9;endArrow=classic;fontColor=#333333;" edge="1" parent="1" source="b_resume" target="b_analyst">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+    <mxCell id="e5" value="safe resume (no PII)" style="edgeStyle=isometricEdgeStyle;html=1;rounded=0;strokeColor=#444444;strokeWidth=1.5;fontSize=9;endArrow=classic;fontColor=#333333;" edge="1" parent="1" source="b_resume" target="b_tailor">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+    <mxCell id="e6" value="safe resume (no PII)" style="edgeStyle=isometricEdgeStyle;html=1;rounded=0;strokeColor=#444444;strokeWidth=1.5;fontSize=9;endArrow=classic;fontColor=#333333;" edge="1" parent="1" source="b_resume" target="b_editor">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+    <mxCell id="e7" value="session gate" style="edgeStyle=isometricEdgeStyle;html=1;dashed=1;strokeColor=#d79b00;strokeWidth=1.5;fontSize=9;endArrow=classic;fontColor=#333333;" edge="1" parent="1" source="b_orch" target="b_probe">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+    <mxCell id="e8" value="health probe · CAPTCHA check" style="edgeStyle=isometricEdgeStyle;html=1;dashed=1;strokeColor=#d79b00;strokeWidth=1.5;fontSize=9;endArrow=classic;fontColor=#333333;" edge="1" parent="1" source="b_probe" target="b_linkedin">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+    <mxCell id="e9" value="login · storageState (one-time)" style="edgeStyle=isometricEdgeStyle;html=1;dashed=1;strokeColor=#d79b00;strokeWidth=1.5;fontSize=9;endArrow=classic;fontColor=#333333;" edge="1" parent="1" source="b_cli" target="b_linkedin">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+    <mxCell id="e10" value="dispatch query builder" style="edgeStyle=isometricEdgeStyle;html=1;rounded=0;strokeColor=#444444;strokeWidth=1.5;fontSize=9;endArrow=classic;fontColor=#333333;" edge="1" parent="1" source="b_orch" target="b_scout">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+    <mxCell id="e11" value="search URLs · f_AL=true" style="edgeStyle=isometricEdgeStyle;html=1;rounded=0;strokeColor=#444444;strokeWidth=1.5;fontSize=9;endArrow=classic;fontColor=#333333;" edge="1" parent="1" source="b_scout" target="b_linkedin">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+    <mxCell id="e12" value="JD text · title · company" style="edgeStyle=isometricEdgeStyle;html=1;rounded=0;strokeColor=#444444;strokeWidth=1.5;fontSize=9;endArrow=classic;fontColor=#333333;" edge="1" parent="1" source="b_linkedin" target="b_scout">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+    <mxCell id="e13" value="Job(id=sha256) → NEW" style="edgeStyle=isometricEdgeStyle;html=1;rounded=0;strokeColor=#444444;strokeWidth=1.5;fontSize=9;endArrow=classic;fontColor=#333333;" edge="1" parent="1" source="b_scout" target="b_vault">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+    <mxCell id="e14" value="NEW jobs" style="edgeStyle=isometricEdgeStyle;html=1;rounded=0;strokeColor=#444444;strokeWidth=1.5;fontSize=9;endArrow=classic;fontColor=#333333;" edge="1" parent="1" source="b_vault" target="b_analyst">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+    <mxCell id="e15" value="JD + safe resume" style="edgeStyle=isometricEdgeStyle;html=1;rounded=0;strokeColor=#444444;strokeWidth=1.5;fontSize=9;endArrow=classic;fontColor=#333333;" edge="1" parent="1" source="b_analyst" target="b_llm">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+    <mxCell id="e16" value="FitScore(0-100)" style="edgeStyle=isometricEdgeStyle;html=1;rounded=0;strokeColor=#444444;strokeWidth=1.5;fontSize=9;endArrow=classic;fontColor=#333333;" edge="1" parent="1" source="b_llm" target="b_analyst">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+    <mxCell id="e17" value="ANALYZED / SKIPPED" style="edgeStyle=isometricEdgeStyle;html=1;rounded=0;strokeColor=#444444;strokeWidth=1.5;fontSize=9;endArrow=classic;fontColor=#333333;" edge="1" parent="1" source="b_analyst" target="b_vault">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+    <mxCell id="e18" value="ANALYZED jobs" style="edgeStyle=isometricEdgeStyle;html=1;rounded=0;strokeColor=#444444;strokeWidth=1.5;fontSize=9;endArrow=classic;fontColor=#333333;" edge="1" parent="1" source="b_vault" target="b_tailor">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+    <mxCell id="e19" value="JD + safe resume" style="edgeStyle=isometricEdgeStyle;html=1;rounded=0;strokeColor=#444444;strokeWidth=1.5;fontSize=9;endArrow=classic;fontColor=#333333;" edge="1" parent="1" source="b_tailor" target="b_llm">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+    <mxCell id="e20" value="ResumeOutput (JSON Resume)" style="edgeStyle=isometricEdgeStyle;html=1;rounded=0;strokeColor=#444444;strokeWidth=1.5;fontSize=9;endArrow=classic;fontColor=#333333;" edge="1" parent="1" source="b_llm" target="b_tailor">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+    <mxCell id="e21" value="tailored resume + PII injected" style="edgeStyle=isometricEdgeStyle;html=1;rounded=0;strokeColor=#444444;strokeWidth=1.5;fontSize=9;endArrow=classic;fontColor=#333333;" edge="1" parent="1" source="b_tailor" target="b_doc">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+    <mxCell id="e22" value="resume.pdf · cv_path" style="edgeStyle=isometricEdgeStyle;html=1;rounded=0;strokeColor=#444444;strokeWidth=1.5;fontSize=9;endArrow=classic;fontColor=#333333;" edge="1" parent="1" source="b_doc" target="b_vault">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+    <mxCell id="e23" value="DRAFTED + pdf path" style="edgeStyle=isometricEdgeStyle;html=1;rounded=0;strokeColor=#444444;strokeWidth=1.5;fontSize=9;endArrow=classic;fontColor=#333333;" edge="1" parent="1" source="b_vault" target="b_editor">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+    <mxCell id="e24" value="JD + safe resume + PDF text" style="edgeStyle=isometricEdgeStyle;html=1;rounded=0;strokeColor=#444444;strokeWidth=1.5;fontSize=9;endArrow=classic;fontColor=#333333;" edge="1" parent="1" source="b_editor" target="b_llm">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+    <mxCell id="e25" value="EditorScore + feedback" style="edgeStyle=isometricEdgeStyle;html=1;rounded=0;strokeColor=#444444;strokeWidth=1.5;fontSize=9;endArrow=classic;fontColor=#333333;" edge="1" parent="1" source="b_llm" target="b_editor">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+    <mxCell id="e26" value="EDITED / retry → ANALYZED" style="edgeStyle=isometricEdgeStyle;html=1;rounded=0;strokeColor=#444444;strokeWidth=1.5;fontSize=9;endArrow=classic;fontColor=#333333;" edge="1" parent="1" source="b_editor" target="b_vault">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+    <mxCell id="e27" value="PENDING_APPROVAL" style="edgeStyle=isometricEdgeStyle;html=1;rounded=0;strokeColor=#444444;strokeWidth=1.5;fontSize=9;endArrow=classic;fontColor=#333333;" edge="1" parent="1" source="b_vault" target="b_human">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+    <mxCell id="e28" value="approval y/N" style="edgeStyle=isometricEdgeStyle;html=1;dashed=1;strokeColor=#d79b00;strokeWidth=1.5;fontSize=9;endArrow=classic;fontColor=#333333;" edge="1" parent="1" source="b_human" target="b_app">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+    <mxCell id="e29" value="Easy Apply clicks" style="edgeStyle=isometricEdgeStyle;html=1;rounded=0;strokeColor=#444444;strokeWidth=1.5;fontSize=9;endArrow=classic;fontColor=#333333;" edge="1" parent="1" source="b_app" target="b_linkedin">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+    <mxCell id="e30" value="APPLIED / FAILED" style="edgeStyle=isometricEdgeStyle;html=1;rounded=0;strokeColor=#444444;strokeWidth=1.5;fontSize=9;endArrow=classic;fontColor=#333333;" edge="1" parent="1" source="b_app" target="b_vault">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+    <mxCell id="e31" value="CAPTCHA_DETECTED → halt" style="edgeStyle=isometricEdgeStyle;html=1;dashed=1;strokeColor=#b85450;strokeWidth=1.5;fontSize=9;endArrow=classic;fontColor=#b85450;" edge="1" parent="1" source="b_app" target="b_orch">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+    <mxCell id="e32" value="ErrorRecord · 3 retries → FAILED (DLQ)" style="edgeStyle=isometricEdgeStyle;html=1;dashed=1;strokeColor=#b85450;strokeWidth=1.5;fontSize=9;endArrow=classic;fontColor=#b85450;" edge="1" parent="1" source="b_orch" target="b_vault">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+    <mxCell id="e33" value="session invalid → halt" style="edgeStyle=isometricEdgeStyle;html=1;dashed=1;strokeColor=#b85450;strokeWidth=1.5;fontSize=9;endArrow=classic;fontColor=#b85450;" edge="1" parent="1" source="b_probe" target="b_orch">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+
+    <mxCell id="explainer" value="&lt;b&gt;&lt;font size=&quot;14&quot;&gt;Explainer — how the system runs&lt;/font&gt;&lt;/b&gt;&lt;br&gt;&lt;br&gt;FlowJob is a hybrid pipeline: deterministic Python drives the flow, LLM agents are processors, SQLite is the single source of truth.&lt;br&gt;&lt;br&gt;&lt;b&gt;1. Scout&lt;/b&gt; — builds LinkedIn queries from resume preferences (target_roles, work_types, locations), scrapes Easy-Apply-only jobs, dedups via sha256 id.&lt;br&gt;src/agents/scout.py · orchestrator.py:34-91&lt;br&gt;&lt;br&gt;&lt;b&gt;2. Analyst&lt;/b&gt; — LLM fit scoring → FitScore; below min_fit_score → SKIPPED.&lt;br&gt;src/agents/analyst.py · orchestrator.py:186-206&lt;br&gt;&lt;br&gt;&lt;b&gt;3. Tailor&lt;/b&gt; — receives safe resume (no PII), returns JSON Resume; contact info re-injected locally at the edge.&lt;br&gt;src/agents/tailor.py:119-131&lt;br&gt;&lt;br&gt;&lt;b&gt;4. Editor&lt;/b&gt; — QA on PDF text vs JD: keyword coverage, fact-check, tone audit; feedback loop, max 1 retry.&lt;br&gt;src/agents/editor.py · orchestrator.py:238-268&lt;br&gt;&lt;br&gt;&lt;b&gt;5. Doc Factory&lt;/b&gt; — Jinja2 HTML → Playwright print-to-PDF → PyMuPDF ATS text check.&lt;br&gt;src/utils/document_generator.py:28-68&lt;br&gt;&lt;br&gt;&lt;b&gt;6. Approval gate&lt;/b&gt; — notify-send + CLI y/N; pipeline never auto-submits.&lt;br&gt;orchestrator.py:149-157 · 282-303&lt;br&gt;&lt;br&gt;&lt;b&gt;7. Applicator&lt;/b&gt; — headed Playwright Easy Apply with temporal jitter; unknown fields → screenshot + human input.&lt;br&gt;src/agents/applicator.py:34-105&lt;br&gt;&lt;br&gt;&lt;b&gt;Guards&lt;/b&gt;&lt;br&gt;• Session health probe gates every cycle; CAPTCHA or login redirect halts immediately (src/tools/browser.py:19-60 · orchestrator.py:308-311).&lt;br&gt;• Errors land in ErrorRecord; after 3 retries job → FAILED (DLQ) (orchestrator.py:93-147).&lt;br&gt;&lt;br&gt;&lt;b&gt;Architecture constraints&lt;/b&gt;&lt;br&gt;• Deterministic orchestration — no LLM decides pipeline flow (AGENTS.md · design_spec.md §1).&lt;br&gt;• PII boundary — LLM never sees contact info (resume_parser.py:52-60).&lt;br&gt;• Watch mode sleeps 45-90 min with jitter between cycles (cli.py:90-104)." style="rounded=1;whiteSpace=wrap;html=1;verticalAlign=top;align=left;spacing=14;fillColor=#ffffff;strokeColor=#999999;fontColor=#333333;fontSize=10;" vertex="1" parent="1">
+      <mxGeometry x="2100" y="40" width="470" height="720" as="geometry"/>
+    </mxCell>
+
+    <mxCell id="lg_title" value="&lt;b&gt;Legend&lt;/b&gt;" style="text;html=1;fontSize=13;fontStyle=1;align=left;fontColor=#333333;" vertex="1" parent="1">
+      <mxGeometry x="60" y="1010" width="200" height="24" as="geometry"/>
+    </mxCell>
+    <mxCell id="lg_box" value="" style="rounded=1;fillColor=#ffffff;strokeColor=#aaaaaa;html=1;" vertex="1" parent="1">
+      <mxGeometry x="30" y="1000" width="880" height="470" as="geometry"/>
+    </mxCell>
+    <mxCell id="lg_sw1" value="" style="shape=isoCube;isoAngle=15;size=10;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">
+      <mxGeometry x="70" y="1050" width="30" height="20" as="geometry"/>
+    </mxCell>
+    <mxCell id="lg_t1" value="Control &amp; orchestration — CLI tower, Orchestrator HQ" style="text;html=1;align=left;fontSize=10;fontColor=#333333;" vertex="1" parent="1">
+      <mxGeometry x="115" y="1048" width="420" height="24" as="geometry"/>
+    </mxCell>
+    <mxCell id="lg_sw2" value="" style="shape=isoCube;isoAngle=15;size=10;html=1;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="1">
+      <mxGeometry x="70" y="1092" width="30" height="20" as="geometry"/>
+    </mxCell>
+    <mxCell id="lg_t2" value="Agent processors — Scout, Analyst, Tailor, Editor, Applicator" style="text;html=1;align=left;fontSize=10;fontColor=#333333;" vertex="1" parent="1">
+      <mxGeometry x="115" y="1090" width="420" height="24" as="geometry"/>
+    </mxCell>
+    <mxCell id="lg_sw3" value="" style="shape=isoCube;isoAngle=15;size=10;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;" vertex="1" parent="1">
+      <mxGeometry x="70" y="1134" width="30" height="20" as="geometry"/>
+    </mxCell>
+    <mxCell id="lg_t3" value="Document pipeline — HTML / PDF / ATS validation" style="text;html=1;align=left;fontSize=10;fontColor=#333333;" vertex="1" parent="1">
+      <mxGeometry x="115" y="1132" width="420" height="24" as="geometry"/>
+    </mxCell>
+    <mxCell id="lg_sw4" value="" style="shape=isoCube;isoAngle=15;size=10;html=1;fillColor=#fff2cc;strokeColor=#d6b656;" vertex="1" parent="1">
+      <mxGeometry x="70" y="1176" width="30" height="20" as="geometry"/>
+    </mxCell>
+    <mxCell id="lg_t4" value="Data store — SQLite vault (jobs, errors, runs)" style="text;html=1;align=left;fontSize=10;fontColor=#333333;" vertex="1" parent="1">
+      <mxGeometry x="115" y="1174" width="420" height="24" as="geometry"/>
+    </mxCell>
+    <mxCell id="lg_sw5" value="" style="shape=isoCube;isoAngle=15;size=10;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;" vertex="1" parent="1">
+      <mxGeometry x="70" y="1218" width="30" height="20" as="geometry"/>
+    </mxCell>
+    <mxCell id="lg_t5" value="Human interaction — approval gate (never auto-submit)" style="text;html=1;align=left;fontSize=10;fontColor=#333333;" vertex="1" parent="1">
+      <mxGeometry x="115" y="1216" width="420" height="24" as="geometry"/>
+    </mxCell>
+    <mxCell id="lg_sw6" value="" style="shape=isoCube;isoAngle=15;size=10;html=1;fillColor=#f8cecc;strokeColor=#b85450;" vertex="1" parent="1">
+      <mxGeometry x="70" y="1260" width="30" height="20" as="geometry"/>
+    </mxCell>
+    <mxCell id="lg_t6" value="Safety guards — session probe, CAPTCHA fail-fast" style="text;html=1;align=left;fontSize=10;fontColor=#333333;" vertex="1" parent="1">
+      <mxGeometry x="115" y="1258" width="420" height="24" as="geometry"/>
+    </mxCell>
+    <mxCell id="lg_sw7" value="" style="shape=isoCube;isoAngle=15;size=10;html=1;fillColor=#e6e6e6;strokeColor=#888888;" vertex="1" parent="1">
+      <mxGeometry x="70" y="1302" width="30" height="20" as="geometry"/>
+    </mxCell>
+    <mxCell id="lg_t7" value="External systems &amp; config — LinkedIn, LLM API, flowjob.yaml" style="text;html=1;align=left;fontSize=10;fontColor=#333333;" vertex="1" parent="1">
+      <mxGeometry x="115" y="1300" width="420" height="24" as="geometry"/>
+    </mxCell>
+    <mxCell id="lg_note" value="&lt;i&gt;Building height = depth of browser/LLM interaction (tall: Scout, Applicator; low: guards, config).&lt;/i&gt;" style="text;html=1;align=left;fontSize=9;fontColor=#666666;" vertex="1" parent="1">
+      <mxGeometry x="70" y="1335" width="520" height="20" as="geometry"/>
+    </mxCell>
+    <mxCell id="lg_e1" value="" style="edgeStyle=isometricEdgeStyle;html=1;rounded=0;strokeColor=#444444;strokeWidth=1.5;endArrow=classic;" edge="1" parent="1" source="lg_sw1" target="lg_sw2">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+    <mxCell id="lg_et1" value="solid = payload data (JD text, resumes, scores)" style="text;html=1;align=left;fontSize=10;fontColor=#333333;" vertex="1" parent="1">
+      <mxGeometry x="70" y="1372" width="420" height="20" as="geometry"/>
+    </mxCell>
+    <mxCell id="lg_e2" value="" style="edgeStyle=isometricEdgeStyle;html=1;dashed=1;strokeColor=#d79b00;strokeWidth=1.5;endArrow=classic;" edge="1" parent="1" source="lg_sw2" target="lg_sw3">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+    <mxCell id="lg_et2" value="dashed amber = control / gates (session, approval, login)" style="text;html=1;align=left;fontSize=10;fontColor=#333333;" vertex="1" parent="1">
+      <mxGeometry x="70" y="1402" width="420" height="20" as="geometry"/>
+    </mxCell>
+    <mxCell id="lg_e3" value="" style="edgeStyle=isometricEdgeStyle;html=1;dashed=1;strokeColor=#b85450;strokeWidth=1.5;endArrow=classic;" edge="1" parent="1" source="lg_sw3" target="lg_sw4">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+    <mxCell id="lg_et3" value="dashed red = error / halt (CAPTCHA, session loss, DLQ)" style="text;html=1;align=left;fontSize=10;fontColor=#333333;" vertex="1" parent="1">
+      <mxGeometry x="70" y="1432" width="420" height="20" as="geometry"/>
+    </mxCell>
+
+    <mxCell id="sm_title" value="&lt;b&gt;JobState machine — SQLite is the single source of truth&lt;/b&gt;&lt;br&gt;&lt;font size=&quot;9&quot; color=&quot;#666666&quot;&gt;src/db/models.py:13-24 · transitions in orchestrator.py&lt;/font&gt;" style="text;html=1;fontSize=12;fontStyle=1;align=left;fontColor=#333333;" vertex="1" parent="1">
+      <mxGeometry x="960" y="1008" width="700" height="40" as="geometry"/>
+    </mxCell>
+    <mxCell id="sm_box" value="" style="rounded=1;fillColor=#ffffff;strokeColor=#aaaaaa;html=1;" vertex="1" parent="1">
+      <mxGeometry x="940" y="1000" width="930" height="470" as="geometry"/>
+    </mxCell>
+    <mxCell id="s1" value="NEW" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=10;fontStyle=1;" vertex="1" parent="1">
+      <mxGeometry x="980" y="1060" width="80" height="32" as="geometry"/>
+    </mxCell>
+    <mxCell id="s2" value="ANALYZED" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=10;fontStyle=1;" vertex="1" parent="1">
+      <mxGeometry x="1090" y="1060" width="80" height="32" as="geometry"/>
+    </mxCell>
+    <mxCell id="s3" value="DRAFTED" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=10;fontStyle=1;" vertex="1" parent="1">
+      <mxGeometry x="1200" y="1060" width="80" height="32" as="geometry"/>
+    </mxCell>
+    <mxCell id="s4" value="EDITED" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=10;fontStyle=1;" vertex="1" parent="1">
+      <mxGeometry x="1310" y="1060" width="80" height="32" as="geometry"/>
+    </mxCell>
+    <mxCell id="s5" value="PENDING_APPROVAL" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=10;fontStyle=1;" vertex="1" parent="1">
+      <mxGeometry x="1420" y="1060" width="110" height="32" as="geometry"/>
+    </mxCell>
+    <mxCell id="s6" value="APPLIED" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=10;fontStyle=1;" vertex="1" parent="1">
+      <mxGeometry x="1560" y="1060" width="80" height="32" as="geometry"/>
+    </mxCell>
+    <mxCell id="se1" value="SKIPPED (fit &lt; thr)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontSize=9;" vertex="1" parent="1">
+      <mxGeometry x="1090" y="1140" width="100" height="26" as="geometry"/>
+    </mxCell>
+    <mxCell id="se2" value="TAILOR_FAIL" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontSize=9;" vertex="1" parent="1">
+      <mxGeometry x="1200" y="1140" width="100" height="26" as="geometry"/>
+    </mxCell>
+    <mxCell id="se3" value="EDIT_FAIL" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontSize=9;" vertex="1" parent="1">
+      <mxGeometry x="1310" y="1140" width="100" height="26" as="geometry"/>
+    </mxCell>
+    <mxCell id="se4" value="FAILED (DLQ)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontSize=9;" vertex="1" parent="1">
+      <mxGeometry x="1560" y="1140" width="100" height="26" as="geometry"/>
+    </mxCell>
+    <mxCell id="es1" value="" style="html=1;strokeColor=#333333;strokeWidth=1.5;endArrow=classic;" edge="1" parent="1" source="s1" target="s2">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+    <mxCell id="es2" value="" style="html=1;strokeColor=#333333;strokeWidth=1.5;endArrow=classic;" edge="1" parent="1" source="s2" target="s3">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+    <mxCell id="es3" value="" style="html=1;strokeColor=#333333;strokeWidth=1.5;endArrow=classic;" edge="1" parent="1" source="s3" target="s4">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+    <mxCell id="es4" value="" style="html=1;strokeColor=#333333;strokeWidth=1.5;endArrow=classic;" edge="1" parent="1" source="s4" target="s5">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+    <mxCell id="es5" value="user y" style="html=1;strokeColor=#333333;strokeWidth=1.5;endArrow=classic;fontSize=8;" edge="1" parent="1" source="s5" target="s6">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+    <mxCell id="ess1" value="fit &lt; min" style="html=1;dashed=1;strokeColor=#b85450;strokeWidth=1.5;endArrow=classic;fontSize=8;" edge="1" parent="1" source="s2" target="se1">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+    <mxCell id="ess2" value="3 retries" style="html=1;dashed=1;strokeColor=#b85450;strokeWidth=1.5;endArrow=classic;fontSize=8;" edge="1" parent="1" source="s3" target="se2">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+    <mxCell id="ess3" value="2nd fail" style="html=1;dashed=1;strokeColor=#b85450;strokeWidth=1.5;endArrow=classic;fontSize=8;" edge="1" parent="1" source="s4" target="se3">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+    <mxCell id="ess4" value="apply fail" style="html=1;dashed=1;strokeColor=#b85450;strokeWidth=1.5;endArrow=classic;fontSize=8;" edge="1" parent="1" source="s6" target="se4">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+    <mxCell id="sm_note" value="&lt;i&gt;Retry paths: TAILOR_FAIL→ANALYZED · EDIT_FAIL→DRAFTED · FAILED→PENDING_APPROVAL — re-entered by process_retries (orchestrator.py:159-184). REJECTED is reserved (models.py:24).&lt;/i&gt;" style="text;html=1;align=left;fontSize=9;fontColor=#666666;" vertex="1" parent="1">
+      <mxGeometry x="960" y="1200" width="860" height="40" as="geometry"/>
+    </mxCell>
+  </root>
+</mxGraphModel>

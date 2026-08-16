@@ -32,6 +32,9 @@ def session():
     with Session(engine) as session:
         yield session
 
+@patch("src.pipeline.orchestrator.save_draft_json", return_value="fake_resume.json")
+@patch("src.pipeline.orchestrator.load_draft_json", return_value={"basics": {"name": "Test"}})
+@patch("src.pipeline.orchestrator.process_scout")
 @patch("src.pipeline.orchestrator.prompt_user_approval", return_value=True)
 @patch("src.pipeline.orchestrator.init_db")
 @patch("src.pipeline.orchestrator.get_session")
@@ -42,7 +45,7 @@ def session():
 @patch("src.utils.document_generator.PlaywrightDocumentGenerator")
 @patch("src.utils.resume_parser.parse_master_resume")
 def test_full_pipeline_sequence(
-    mock_parse, mock_docgen, mock_exists, mock_open, mock_yaml, mock_check, mock_get_session, mock_init_db, mock_prompt, session
+    mock_parse, mock_docgen, mock_exists, mock_open, mock_yaml, mock_check, mock_get_session, mock_init_db, mock_prompt, mock_scout, mock_load_draft, mock_save_draft, session
 ):
     mock_yaml.return_value = {"analyst": {"min_fit_score": 70}, "data": {"db_path": "memory"}}
     mock_get_session.return_value.__enter__.return_value = session

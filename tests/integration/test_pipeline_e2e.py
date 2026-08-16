@@ -3,14 +3,15 @@ from unittest.mock import patch, MagicMock
 from src.cli import build_agents
 from src.pipeline.orchestrator import run_pipeline
 
-@patch("google.genai.Client")
-def test_build_agents_creates_all_agents(mock_client):
+@patch.dict('os.environ', {'OPENROUTER_API_KEY': 'test_key'})
+def test_build_agents_creates_all_agents():
     agents = build_agents()
     assert "analyst" in agents
     assert "tailor" in agents
     assert "editor" in agents
     assert "applicator" in agents
 
+@patch("src.pipeline.orchestrator.process_scout")
 @patch("src.pipeline.orchestrator.init_db")
 @patch("src.pipeline.orchestrator.get_session")
 @patch("src.tools.browser.check_session_health")
@@ -18,7 +19,7 @@ def test_build_agents_creates_all_agents(mock_client):
 @patch("src.pipeline.orchestrator.yaml.safe_load")
 @patch("src.utils.resume_parser.parse_master_resume")
 @patch("os.path.exists")
-def test_run_pipeline_wiring(mock_exists, mock_parse_master, mock_yaml_load, mock_open, mock_check_session, mock_get_session, mock_init_db):
+def test_run_pipeline_wiring(mock_exists, mock_parse_master, mock_yaml_load, mock_open, mock_check_session, mock_get_session, mock_init_db, mock_scout):
     mock_check_session.return_value = True
     mock_yaml_load.return_value = {"data": {"db_path": ":memory:"}}
     

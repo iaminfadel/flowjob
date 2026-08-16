@@ -4,10 +4,8 @@ from pathlib import Path
 from typing import Optional, List, Dict
 from pydantic import BaseModel, Field
 
-from google import genai
-from google.genai import types
-
 from src.agents.runner import AgentRunner
+from src.agents.structured_llm import LangChainStructuredAgent
 from src.utils.resume_parser import get_safe_resume_data, parse_master_resume
 
 # JSON Resume Schema Pydantic Models for GenAI
@@ -66,21 +64,7 @@ def parse_location(location: str) -> dict:
         }
     return {"city": location}
 
-class TailorAgent(AgentRunner):
-    def __init__(self, client, model_name: str = "gemini-2.5-pro"):
-        self.model_name = model_name
-        self.client = client
-
-    def run(self, jd_text: str, resume_path: str = "master_resume.md", feedback: Optional[str] = None) -> dict:
-        """
-        Tailors the safe master resume for a specific JD, re-injects PII,
-        and returns the tailored resume data as a dictionary.
-        """
-        # 1. Get safe data for LLM
-        safe_resume = get_safe_resume_data(resume_path)
-        
-        # 2. Ask LLM to tailor the resume
-        prompt = f"""
+TAILOR_PROMPT_TEMPLATE = """
 You are an expert technical recruiter and resume writer.
 I have a job description and a candidate's master resume (without PII).
 Select the most relevant experience, projects, and skills to tailor the resume for this job.
@@ -91,22 +75,46 @@ Job Description:
 {jd_text}
 
 Candidate's Safe Resume Data:
-{safe_resume.model_dump_json(indent=2)}
+{safe_resume_json}
+{feedback_section}
 """
-        if feedback:
-            prompt += f"\n\nFEEDBACK FROM PREVIOUS ATTEMPT (You MUST address this):\n{feedback}\n"
-        
-        response = self.client.models.generate_content(
-            model=self.model_name,
-            contents=prompt,
-            config=types.GenerateContentConfig(
-                response_mime_type="application/json",
-                response_schema=ResumeOutput,
-                temperature=0.2,
-            ),
+
+def tailor_preprocessor(context: dict) -> dict:
+    safe_resume = get_safe_resume_data(context.get("resume_path", "master_resume.md"))
+    context["safe_resume_json"] = safe_resume.model_dump_json(indent=2)
+    feedback = context.get("feedback")
+    if feedback:
+        context["feedback_section"] = f"\n\nFEEDBACK FROM PREVIOUS ATTEMPT (You MUST address this):\n{feedback}\n"
+    else:
+        context["feedback_section"] = ""
+    return context
+
+class TailorAgent(AgentRunner):
+    def __init__(self, model_name: str = "google/gemini-2.5-pro", openrouter_base_url: str = "https://openrouter.ai/api/v1", openrouter_api_key: str = None):
+        super().__init__()
+        self.structured_agent = LangChainStructuredAgent(
+            prompt_template=TAILOR_PROMPT_TEMPLATE,
+            response_schema=ResumeOutput,
+            temperature=0.2,
+            preprocessors=[tailor_preprocessor],
+            model_name=model_name,
+            openrouter_base_url=openrouter_base_url,
+            openrouter_api_key=openrouter_api_key
         )
+
+    def run(self, jd_text: str, resume_path: str = "master_resume.md", feedback: Optional[str] = None) -> dict:
+        """
+        Tailors the safe master resume for a specific JD, re-injects PII,
+        and returns the tailored resume data as a dictionary.
+        """
+        context = {
+            "jd_text": jd_text,
+            "resume_path": resume_path,
+            "feedback": feedback
+        }
         
-        tailored_resume = response.parsed.model_dump()
+        parsed_response = self.structured_agent.run(context)
+        tailored_resume = parsed_response.model_dump()
         
         # 3. Re-inject PII
         metadata, _ = parse_master_resume(resume_path)
@@ -118,9 +126,8 @@ Candidate's Safe Resume Data:
             "profiles": metadata.links
         }
         
-        # Also inject education from metadata if the LLM didn't (often LLM drops it if not in safe_resume)
+        # Also inject education from metadata if the LLM didn't
         if not tailored_resume.get("education") and hasattr(metadata, "education"):
             tailored_resume["education"] = metadata.education
 
         return tailored_resume
-

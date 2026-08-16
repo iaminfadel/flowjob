@@ -1,9 +1,8 @@
 import os
 from pydantic import BaseModel, Field
-from google import genai
 from src.utils.resume_parser import get_safe_resume_data
 from src.utils.pdf_utils import extract_text_from_pdf
-from src.agents.structured_llm import StructuredLLMAgent
+from src.agents.structured_llm import LangChainStructuredAgent
 
 class EditorScore(BaseModel):
     score: int = Field(description="Score from 0 to 100 based on keyword coverage and formatting.")
@@ -37,12 +36,13 @@ def editor_preprocessor(context: dict) -> dict:
     context["safe_resume_json"] = safe_resume.model_dump_json(indent=2)
     return context
 
-def EditorAgent(client) -> StructuredLLMAgent:
-    return StructuredLLMAgent(
-        client=client,
+def EditorAgent(model_name: str = "google/gemini-2.5-pro", openrouter_base_url: str = "https://openrouter.ai/api/v1", openrouter_api_key: str = None) -> LangChainStructuredAgent:
+    return LangChainStructuredAgent(
         prompt_template=EDITOR_PROMPT_TEMPLATE,
         response_schema=EditorScore,
         temperature=0.1,
-        preprocessors=[editor_preprocessor]
+        preprocessors=[editor_preprocessor],
+        model_name=model_name,
+        openrouter_base_url=openrouter_base_url,
+        openrouter_api_key=openrouter_api_key
     )
-

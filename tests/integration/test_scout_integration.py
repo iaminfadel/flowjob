@@ -22,7 +22,7 @@ class TestScoutIntegration(unittest.TestCase):
             # In our static HTML, clicking won't update the detail pane.
             # But scout logic extracts the DOM *as is* after click.
             # Since our static HTML always has "Easy Apply" in the button, the agent will think the first job clicked is Easy Apply!
-            self.assertEqual(len(jobs), 2)
+            self.assertEqual(len(jobs), 1)
             job = jobs[0]
             self.assertEqual(job.title, "Software Engineer")
             self.assertEqual(job.company, "Mock Company")

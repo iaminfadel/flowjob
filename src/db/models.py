@@ -22,6 +22,8 @@ class JobState(str, Enum):
     TAILOR_FAIL = "TAILOR_FAIL"
     EDIT_FAIL = "EDIT_FAIL"
     REJECTED = "REJECTED"
+    NEEDS_EVIDENCE = "NEEDS_EVIDENCE"
+    UNFIXABLE = "UNFIXABLE"
 
 class Job(SQLModel, table=True):
     id: str = Field(primary_key=True)  # sha256(url + title + company)[:12]
@@ -33,6 +35,7 @@ class Job(SQLModel, table=True):
     jd_text: str
     state: JobState = Field(default=JobState.NEW)
     tailor_metadata: dict = Field(default_factory=dict, sa_column=Column(JSON))
+    grilling_transcript: dict = Field(default_factory=dict, sa_column=Column(JSON))
     date_applied: Optional[str] = None
     cv_path: Optional[str] = None
     fit_score: Optional[int] = None

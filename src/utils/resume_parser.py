@@ -46,6 +46,7 @@ def parse_master_resume(path: str = "master_resume.md") -> tuple[ResumeMetadata,
 
 class SafeResumeData(BaseModel):
     skills: dict[str, list[str]]
+    preferences: dict
     experience: str
 
 def get_safe_resume_data(path: str = "master_resume.md") -> SafeResumeData:
@@ -54,5 +55,6 @@ def get_safe_resume_data(path: str = "master_resume.md") -> SafeResumeData:
     
     return SafeResumeData(
         skills=metadata.skills,
+        preferences=metadata.preferences,
         experience=content
     )
