@@ -1,31 +1,31 @@
 scout:
   max_scrape_per_run: 2
-  # time_filter: "past_24_hours"
+  time_filter: "past_24_hours"
   
 analyst:
-  model: "qwen/qwen3.8-27b"
+  model: "gemini-3.1-flash-lite"
   min_fit_score: 50
   
 tailor:
-  model: "qwen/qwen3.8-27b"
+  model: "gemini-3.1-flash-lite"
   
 editor:
-  model: "qwen/qwen3.8-27b"
+  model: "gemini-3.1-flash-lite"
   min_keyword_coverage: 75
 
 critic:
-  model: "qwen/qwen3.8-27b"
+  model: "gemini-3.1-flash-lite"
 
 writer:
-  model: "qwen/qwen3.8-27b"
+  model: "gemini-3.1-flash-lite"
   max_writer_rounds: 3
 
 grilling:
-  model: "qwen/qwen3.8-27b"
+  model: "gemini-3.1-flash-lite"
   max_turns_per_gap: 5
 
 auditor:
-  model: "qwen/qwen3.8-27b"
+  model: "gemini-3.1-flash-lite"
   max_attempts: 3
 
 applicator:
@@ -35,10 +35,14 @@ applicator:
   require_approval: true
   
 llm:
-  default_model: "qwen/qwen3.8-27b"
+  default_model: "gemini-3.1-flash-lite"
   llm_timeout_seconds: 60
   max_retries: 3
   openrouter_base_url: "https://openrouter.ai/api/v1"
+  # Provider chain (priority order). Tested 2026-08-17:
+  # - openrouter qwen: needs credits topped up (402 currently)
+  # - gemini-lite: primary workhorse during testing (free, 20 req/day/model)
+  # - orca: free quota exhausted (403 currently)
   providers:
     - name: openrouter
       base_url: "https://openrouter.ai/api/v1"
