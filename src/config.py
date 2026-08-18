@@ -1,7 +1,19 @@
 import os
 import yaml
 from pathlib import Path
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
+
+class WatchConfig(BaseModel):
+    min_wait_minutes: int = 45
+    max_wait_minutes: int = 90
+
+    @model_validator(mode="after")
+    def _check_bounds(self):
+        if self.min_wait_minutes < 1:
+            raise ValueError("watch.min_wait_minutes must be >= 1")
+        if self.max_wait_minutes <= self.min_wait_minutes:
+            raise ValueError("watch.max_wait_minutes must be greater than min_wait_minutes")
+        return self
 
 class ScoutConfig(BaseModel):
     max_scrape_per_run: int = 30
@@ -65,6 +77,7 @@ class FlowJobConfig(BaseModel):
     applicator: ApplicatorConfig = Field(default_factory=ApplicatorConfig)
     llm: LLMConfig = Field(default_factory=LLMConfig)
     data: DataConfig = Field(default_factory=DataConfig)
+    watch: WatchConfig = Field(default_factory=WatchConfig)
 
 def load_config(path: str = "flowjob.yaml") -> FlowJobConfig:
     """Load and validate the flowjob.yaml configuration file."""

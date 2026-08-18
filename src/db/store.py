@@ -4,10 +4,16 @@ def init_db(db_path: str):
     """Initialize the SQLite database with the required schema.
 
     Creates missing tables only — never drops existing data.
+    Enables WAL journal mode and a busy timeout so concurrent readers
+    (e.g. the TUI) do not hit 'database is locked' while the pipeline writes.
     """
     sqlite_url = f"sqlite:///{db_path}"
     engine = create_engine(sqlite_url)
-    
+
+    with engine.connect() as conn:
+        conn.exec_driver_sql("PRAGMA journal_mode=WAL")
+        conn.exec_driver_sql("PRAGMA busy_timeout=5000")
+
     # Create all tables (idempotent; preserves existing rows)
     import src.db.models  # Ensure models are registered
     SQLModel.metadata.create_all(engine)

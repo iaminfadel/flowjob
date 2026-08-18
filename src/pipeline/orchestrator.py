@@ -16,6 +16,9 @@ import urllib.parse
 from src.agents.scout import scrape_linkedin_jobs
 from src.utils.resume_parser import parse_master_resume
 
+class SessionHealthError(RuntimeError):
+    """Raised when the browser session health probe fails inside an in-process host."""
+
 def save_draft_json(job_id: str, draft_data: dict, output_dir: str = "data/resumes") -> str:
     dir_path = os.path.join(output_dir, job_id)
     os.makedirs(dir_path, exist_ok=True)
@@ -161,16 +164,6 @@ def run_agent_step(session, agent_name: str, job, fallback_state: JobState, step
     except Exception as e:
         handle_job_failure(session, agent_name, e, job, fallback_state)
         return True
-
-def prompt_user_approval(job) -> bool:
-    print(f"Prompting user for job: {job.title} at {job.company}")
-    try:
-        subprocess.run(["notify-send", "FlowJob: Job ready for approval!", f"{job.title} at {job.company}"])
-    except FileNotFoundError:
-        print("notify-send not found, skipping OS notification.")
-        
-    choice = input(f"Apply to {job.title} at {job.company}? [y/N]: ")
-    return choice.strip().lower() == 'y'
 
 def process_retries(session):
     statement = select(ErrorRecord).where(ErrorRecord.retry_count > 0).where(ErrorRecord.retry_count < 3)
@@ -439,7 +432,7 @@ def process_edited_jobs(session):
         session.add(job)
     session.commit()
 
-def process_pending_approval_jobs(session, applicator_agent):
+def process_pending_approval_jobs(session, applicator_agent, approval_fn=None, wait_fn=None):
     statement = select(Job).where(Job.state == JobState.PENDING_APPROVAL)
     pending_jobs = session.exec(statement).all()
     
@@ -448,8 +441,8 @@ def process_pending_approval_jobs(session, applicator_agent):
         
     for job in pending_jobs:
         def _step(j):
-            if prompt_user_approval(j):
-                success = applicator_agent.run(j)
+            if (approval_fn or prompt_user_approval)(j):
+                success = applicator_agent.run(j, wait_fn)
                 if success:
                     j.state = JobState.APPLIED
                     print(f"Job {j.id} successfully APPLIED.")
@@ -462,13 +455,12 @@ def process_pending_approval_jobs(session, applicator_agent):
         if not run_agent_step(session, "ApplicatorAgent", job, JobState.FAILED, _step):
             break
 
-def run_pipeline(agents: dict, url: str = None, dry_run: bool = False, doc_generator=None):
+def run_pipeline(agents: dict, url: str = None, dry_run: bool = False, doc_generator=None, approval_fn=None, wait_fn=None):
     print(f"Pipeline started with url={url} and dry_run={dry_run}")
     
     from src.tools.browser import check_session_health
     if not check_session_health():
-        import sys
-        sys.exit(1)
+        raise SessionHealthError("LinkedIn session health check failed.")
 
     with open("flowjob.yaml", "r") as f:
         config = yaml.safe_load(f)
@@ -487,7 +479,7 @@ def run_pipeline(agents: dict, url: str = None, dry_run: bool = False, doc_gener
         process_edited_jobs(session)
         
         if not dry_run:
-            process_pending_approval_jobs(session, agents["applicator"])
+            process_pending_approval_jobs(session, agents["applicator"], approval_fn, wait_fn)
             
             from src.db.models import PipelineRun
             run_record = PipelineRun(timestamp=datetime.now().isoformat(), success=True)

@@ -97,17 +97,29 @@ def watch():
     """Run the FlowJob pipeline continuously with jitter."""
     import time
     import random
+    from src.config import load_config
     from src.pipeline.orchestrator import run_pipeline
+    from src.pipeline.watch_lock import acquire_watch_lock, WatchLockHeldError
+    from src.db.store import init_db
+
+    cfg = load_config("flowjob.yaml")
+    init_db(cfg.data.db_path)
+
     typer.echo("👀 Starting FlowJob in watch mode...")
     agents = build_agents()
-    while True:
-        typer.echo("🚀 Running pipeline cycle...")
-        
-        run_pipeline(agents=agents)
-        
-        jitter_minutes = random.uniform(45, 90)
-        typer.echo(f"⏳ Sleeping for {jitter_minutes:.2f} minutes before next cycle...")
-        time.sleep(jitter_minutes * 60)
+    try:
+        with acquire_watch_lock():
+            while True:
+                typer.echo("🚀 Running pipeline cycle...")
+                
+                run_pipeline(agents=agents)
+                
+                jitter_minutes = random.uniform(cfg.watch.min_wait_minutes, cfg.watch.max_wait_minutes)
+                typer.echo(f"⏳ Sleeping for {jitter_minutes:.2f} minutes before next cycle...")
+                time.sleep(jitter_minutes * 60)
+    except WatchLockHeldError as e:
+        typer.echo(f"❌ {e}")
+        raise typer.Exit(code=1)
 
 @app.command()
 def status(config: str = typer.Option("flowjob.yaml", help="Path to the configuration file")):
@@ -289,6 +301,22 @@ def logs(
         if raw:
             typer.echo(f"    PROMPT: {r.prompt[:2000]}")
             typer.echo(f"    RESPONSE: {r.response[:2000]}")
+
+@app.command()
+def tui(
+    config: str = typer.Option("flowjob.yaml", help="Path to the configuration file"),
+):
+    """Launch the cockpit TUI (five tabs: Dashboard / Jobs / LLM Logs / Settings / HITL)."""
+    from src.config import load_config
+    from src.db.store import init_db
+
+    conf = load_config(config)
+    init_db(conf.data.db_path)
+
+    from src.tui.app import CockpitApp
+
+    CockpitApp(agents=build_agents(), db_path=conf.data.db_path).run()
+
 
 if __name__ == "__main__":
     app()

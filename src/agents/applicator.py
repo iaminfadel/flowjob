@@ -1,8 +1,10 @@
 import os
 import random
 import time
+from typing import Callable
 from playwright.sync_api import sync_playwright, TimeoutError
 from src.agents.runner import AgentRunner
+from src.utils.display import display_env
 
 class ApplicatorAgent(AgentRunner):
     """
@@ -13,7 +15,59 @@ class ApplicatorAgent(AgentRunner):
     def _random_sleep(self, min_s: float, max_s: float):
         time.sleep(random.uniform(min_s, max_s))
 
-    def run(self, job) -> bool:
+    def _modal_loop(self, page, wait_fn) -> bool:
+        """Drive the Easy Apply modal; blocks via wait_fn on unknown-form-field pauses."""
+        browser_data_dir = "browser_data"
+        while True:
+            # Look for Next, Review, or Submit buttons
+            next_btn = page.get_by_role("button", name="Next", exact=True).first
+            review_btn = page.get_by_role("button", name="Review", exact=True).first
+            submit_btn = page.get_by_role("button", name="Submit application", exact=True).first
+            
+            if submit_btn.is_visible():
+                print("[Applicator] Found 'Submit application' button. Submitting...")
+                self._random_sleep(1.0, 3.0)
+                submit_btn.click()
+                self._random_sleep(3.0, 5.0)
+                print("[Applicator] Application submitted successfully.")
+                return True
+            
+            if next_btn.is_visible() or review_btn.is_visible():
+                btn_to_click = next_btn if next_btn.is_visible() else review_btn
+                btn_to_click.click()
+                
+                try:
+                    page.wait_for_load_state("networkidle", timeout=3000)
+                except TimeoutError:
+                    pass
+                self._random_sleep(1.0, 2.0)
+                
+                # Check for error alerts
+                error_alert = page.get_by_role("alert").first
+                if error_alert.is_visible():
+                    print("[Applicator] Form error detected (missing field).")
+                    # Take screenshot
+                    screenshot_path = os.path.join(browser_data_dir, "unknown_field.png")
+                    page.screenshot(path=screenshot_path)
+                    print(f"[Applicator] Screenshot saved to {screenshot_path}")
+                    
+                    # Block and wait for human input
+                    print("\n[Applicator] PAUSED. Unknown field encountered.")
+                    print("Please check the browser window or screenshot, fill the field manually, and click Next/Review... ")
+                    wait_fn("Press Enter once you have filled the field and clicked Next/Review... ")
+                    # Wait for transition
+                    self._random_sleep(1.0, 2.0)
+                continue
+            
+            # If we reach here, we are stuck or done
+            print("[Applicator] No Next/Review/Submit buttons found. Check if application completed.")
+            # Take screenshot just in case
+            screenshot_path = os.path.join(browser_data_dir, "stuck.png")
+            page.screenshot(path=screenshot_path)
+            print(f"[Applicator] Stuck. Screenshot saved to {screenshot_path}. Aborting.")
+            return False
+
+    def run(self, job, wait_fn: Callable[[str], None] | None = None) -> bool:
         browser_data_dir = "browser_data"
         os.makedirs(browser_data_dir, exist_ok=True)
         
@@ -25,6 +79,7 @@ class ApplicatorAgent(AgentRunner):
             context = p.chromium.launch_persistent_context(
                 user_data_dir=browser_data_dir,
                 headless=False,
+                env=display_env(),
                 viewport={"width": 1280, "height": 720}
             )
             
@@ -54,56 +109,8 @@ class ApplicatorAgent(AgentRunner):
                 easy_apply_btn.click()
                 self._random_sleep(1.0, 2.0)
                 
-                # Loop through the modal
-                while True:
-                    # Look for Next, Review, or Submit buttons
-                    next_btn = page.get_by_role("button", name="Next", exact=True).first
-                    review_btn = page.get_by_role("button", name="Review", exact=True).first
-                    submit_btn = page.get_by_role("button", name="Submit application", exact=True).first
-                    
-                    if submit_btn.is_visible():
-                        print("[Applicator] Found 'Submit application' button. Submitting...")
-                        self._random_sleep(1.0, 3.0)
-                        submit_btn.click()
-                        self._random_sleep(3.0, 5.0)
-                        print("[Applicator] Application submitted successfully.")
-                        return True
-                    
-                    if next_btn.is_visible() or review_btn.is_visible():
-                        btn_to_click = next_btn if next_btn.is_visible() else review_btn
-                        btn_to_click.click()
-                        
-                        try:
-                            page.wait_for_load_state("networkidle", timeout=3000)
-                        except TimeoutError:
-                            pass
-                        self._random_sleep(1.0, 2.0)
-                        
-                        # Check for error alerts
-                        error_alert = page.get_by_role("alert").first
-                        if error_alert.is_visible():
-                            print("[Applicator] Form error detected (missing field).")
-                            # Take screenshot
-                            screenshot_path = os.path.join(browser_data_dir, "unknown_field.png")
-                            page.screenshot(path=screenshot_path)
-                            print(f"[Applicator] Screenshot saved to {screenshot_path}")
-                            
-                            # Block and wait for human input
-                            print("\n[Applicator] PAUSED. Unknown field encountered.")
-                            print("Please check the browser window or screenshot, fill the field manually, and press Enter to continue.")
-                            input("Press Enter once you have filled the field and clicked Next/Review... ")
-                            # Wait for transition
-                            self._random_sleep(1.0, 2.0)
-                        continue
-                    
-                    # If we reach here, we are stuck or done
-                    print("[Applicator] No Next/Review/Submit buttons found. Check if application completed.")
-                    # Take screenshot just in case
-                    screenshot_path = os.path.join(browser_data_dir, "stuck.png")
-                    page.screenshot(path=screenshot_path)
-                    print(f"[Applicator] Stuck. Screenshot saved to {screenshot_path}. Aborting.")
-                    return False
-                    
+                return self._modal_loop(page, wait_fn or input)
+                
             except Exception as e:
                 print(f"[Applicator] Error during automation: {e}")
                 return False
