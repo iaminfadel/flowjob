@@ -276,6 +276,13 @@ class ApprovalRequested(Message):
         super().__init__()
 
 
+def refresh_surfaces(screen: Screen) -> None:
+    for table in screen.query(JobsTable):
+        table.refresh_rows()
+    for pane in screen.query(DashboardPane):
+        pane.refresh_counts()
+
+
 class DashboardPane(Vertical):
     def compose(self) -> ComposeResult:
         yield Static(LOGO, id="logo")
@@ -287,19 +294,28 @@ class DashboardPane(Vertical):
             yield Static(f"Last cycle\n09:46 · 3 jobs · 1 applied", classes="stat-card")
             yield Static(f"LLM spend\n${spend:.4f} · {tokens:,} tok", classes="stat-card")
             yield Static(f"Jobs tracked\n{total}", classes="stat-card")
-            yield Static(f"Awaiting approval\n{pending}", classes="stat-card")
+            yield Static(f"Awaiting approval\n{pending}", id="stat-pending", classes="stat-card")
         yield Label("State counts")
-        table = DataTable(id="state-counts", cursor_type="none", zebra_stripes=True)
-        table.add_column("State", key="state")
-        table.add_column("Count", key="count")
-        table.add_rows([(s, len(jobs_by_state(s))) for s in STATES if jobs_by_state(s)])
-        yield table
+        yield self._counts_table()
         yield Rule()
         with Horizontal(id="watch-row"):
             yield Label("Watch loop")
             yield ProgressBar(id="watch-bar", total=100, show_percentage=False)
             yield Button("Start", id="watch-start", variant="primary")
             yield Button("Stop", id="watch-stop")
+
+    def _counts_table(self) -> DataTable:
+        table = DataTable(id="state-counts", cursor_type="none", zebra_stripes=True)
+        table.add_column("State", key="state")
+        table.add_column("Count", key="count")
+        table.add_rows([(s, len(jobs_by_state(s))) for s in STATES if jobs_by_state(s)])
+        return table
+
+    def refresh_counts(self) -> None:
+        table = self.query_one("#state-counts", DataTable)
+        table.clear()
+        table.add_rows([(s, len(jobs_by_state(s))) for s in STATES if jobs_by_state(s)])
+        self.query_one("#stat-pending", Static).update(f"Awaiting approval\n{len(jobs_by_state('PENDING_APPROVAL'))}")
 
     def on_mount(self) -> None:
         self.running = False
@@ -600,6 +616,7 @@ class VariantTabs(Screen):
         set_state(message.job_id, "APPLIED" if message.approve else "REJECTED")
         self.app.notify("Approved — job applied (mock)" if message.approve else "Rejected (mock)")
         self.query_one(ApprovalList).rebuild()
+        refresh_surfaces(self)
 
 
 class VariantSidebar(Screen):
@@ -658,6 +675,7 @@ class VariantSidebar(Screen):
         set_state(message.job_id, "APPLIED" if message.approve else "REJECTED")
         self.app.notify("Approved — job applied (mock)" if message.approve else "Rejected (mock)")
         self.query_one(ApprovalList).rebuild()
+        refresh_surfaces(self)
 
 
 class StackScreen(Screen):
@@ -735,6 +753,7 @@ class StackHitl(StackScreen):
             set_state(job["id"], "REJECTED")
             self.app.notify("Rejected (mock)")
         self.query_one(ApprovalList).rebuild()
+        refresh_surfaces(self)
 
 
 class ApprovalModal(ModalScreen):
