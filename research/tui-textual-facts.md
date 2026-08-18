@@ -28,15 +28,15 @@ Docs state "Textual requires Python 3.9 or later" ([Getting started](https://tex
 | Version | When | What |
 |---------|------|------|
 | 0.3.0 | 2022-10-31 | `App.run_test` (Pilot) added |
-| 0.12.0 | 2023-02-24 | `ContentSwitcher` added |
+| 0.14.0 | 2023-03-09 | `ContentSwitcher` added |
 | 0.16.0 | 2023-03-22 | `TabbedContent` added |
 | 0.18.0 | 2023-04-04 | Worker API added (`run_worker`, `@work`) |
 
-Sources: [CHANGELOG](https://github.com/Textualize/textual/blob/main/CHANGELOG.md) entries `## [0.3.0]`, `## [0.12.0]`, `## [0.16.0]`, `## [0.18.0]`; widget docs mark "Added in version 0.16.0" ([TabbedContent](https://textual.textualize.io/widgets/tabbed_content/), [Workers guide](https://textual.textualize.io/guide/workers/), [Testing guide](https://textual.textualize.io/guide/testing/)).
+Sources: [CHANGELOG](https://github.com/Textualize/textual/blob/main/CHANGELOG.md) entries `## [0.3.0]`, `## [0.14.0]`, `## [0.16.0]`, `## [0.18.0]`; widget docs mark "Added in version 0.16.0" ([TabbedContent](https://textual.textualize.io/widgets/tabbed_content/), [Workers guide](https://textual.textualize.io/guide/workers/), [Testing guide](https://textual.textualize.io/guide/testing/)).
 
 ## 2. Widget Inventory for the Cockpit Surfaces
 
-Full widget list (39 widgets): Button, Checkbox, Collapsible, ContentSwitcher, DataTable, Digits, DirectoryTree, Footer, Header, Input, Label, Link, ListItem, ListView, LoadingIndicator, Log, MarkdownViewer, Markdown, MaskedInput, OptionList, Placeholder, Pretty, ProgressBar, RadioButton, RadioSet, RichLog, Rule, Select, SelectionList, Sparkline, Static, Switch, TabbedContent, Tabs, TextArea, Toast, Tree — [Widget index](https://textual.textualize.io/widget_gallery/).
+Full widget list (37 widgets): Button, Checkbox, Collapsible, ContentSwitcher, DataTable, Digits, DirectoryTree, Footer, Header, Input, Label, Link, ListItem, ListView, LoadingIndicator, Log, MarkdownViewer, Markdown, MaskedInput, OptionList, Placeholder, Pretty, ProgressBar, RadioButton, RadioSet, RichLog, Rule, Select, SelectionList, Sparkline, Static, Switch, TabbedContent, Tabs, TextArea, Toast, Tree — [Widget index](https://textual.textualize.io/widget_gallery/).
 
 ### Dashboard / jobs table → `DataTable`
 
@@ -50,7 +50,7 @@ Full widget list (39 widgets): Button, Checkbox, Collapsible, ContentSwitcher, D
 ### Navigation → `TabbedContent` (not Tabs alone, StackedContent is gone)
 
 - **`TabbedContent`** (added 0.16.0) combines `Tabs` + `ContentSwitcher`: "Switch between mutually exclusive content panes via a row of tabs". Compose with `TabPane("Title", id=...)`, switch programmatically via the `active` reactive, initial tab via `initial=`, hide/disable tabs at runtime (`hide_tab`, `disable_tab`, `enable_tab`, `show_tab`, `add_pane`, `remove_pane`). Emits `TabActivated`. ([TabbedContent](https://textual.textualize.io/widgets/tabbed_content/))
-- **`Tabs`** standalone if you want the tab strip without panes; **`ContentSwitcher`** (added 0.12.0) for programmatic pane switching with no visible tabs ([widget index](https://textual.textualize.io/widget_gallery/)).
+- **`Tabs`** standalone if you want the tab strip without panes; **`ContentSwitcher`** (added 0.14.0) for programmatic pane switching with no visible tabs ([widget index](https://textual.textualize.io/widget_gallery/)).
 - ⚠️ **`StackedContent` no longer exists** — absent from the current widget index and from `src/textual/containers.py` at HEAD. Use `ContentSwitcher` (its successor role) or `TabbedContent`.
 - Recommendation for cockpit: `TabbedContent` for main areas (Dashboard / Jobs / LLM Logs / Settings / HITL), `ContentSwitcher` inside panes where the app switches views programmatically (e.g. HITL chat ↔ approval).
 
@@ -82,6 +82,7 @@ Worker API added in 0.18.0; everything below from the [Workers guide](https://te
 | `self.run_worker(coro_or_fn, exclusive=True)` | Runs a function in the background, returns a `Worker`. `exclusive=True` cancels previous workers (good for filter-as-you-type). |
 | `@work` decorator | Same as `run_worker`, applied to a method; calling the method starts the worker (no `await` needed). Same args as `run_worker`. |
 | `@work(thread=True)` (or `run_worker(..., thread=True)`) | Runs a **plain synchronous function on a real OS thread** — exactly the pattern for FlowJob's blocking pipeline (urllib/requests-style, CPU-bound, sync libs). ⚠️ Textual **raises an exception** if you put `@work` on a sync function without `thread=True`. |
+| `run_in_thread` | ⚠️ **Does not exist** in Textual (checked against the whole CHANGELOG) — the ticket's tentative name; the actual API is `run_worker(..., thread=True)` / `@work(thread=True)` above. |
 | `get_current_worker()` | Inside a worker: returns the `Worker` so you can check `worker.is_cancelled` between pipeline steps. Threads can't be force-cancelled (unlike coroutines) — cooperative cancellation is the only option. |
 | `self.call_from_thread(fn, *args)` | From inside a thread worker, runs `fn` back on the main thread — the sanctioned way to touch UI/reactives from a thread. |
 | `post_message(...)` | **Thread-safe** — the one UI API you may call directly from a thread worker. |
@@ -108,7 +109,7 @@ This is the full loop for streaming pipeline output: thread worker → `post_mes
   - `await pilot.press("h", "e", "l", "l", "o")` — keys, non-printable names (`"enter"`), `"ctrl+"` modifiers
   - `await pilot.click("#approve")` — CSS selector or widget; `offset=(x, y)`, `times=2/3` for double/triple clicks, `shift`/`meta`/`control` modifiers
   - `await pilot.hover("#widget")`, `await pilot.pause()` — drain pending messages before asserting (essential for message-bubbling timing)
-  - `await pilot.resize_terminal(...)` (added 0.26.0), `run_test(size=(100, 50))` for terminal size; `pilot.mouse_down`/`mouse_up` (0.28.x)
+  - `await pilot.resize_terminal(...)` (added 0.53.0), `run_test(size=(100, 50))` for terminal size; `pilot.mouse_down`/`mouse_up` (0.42.0)
   - Asserting state = plain asserts on widgets: `assert app.screen.styles.background == Color.parse("red")`, or query widgets (`query_one`) and check reactives/values.
 - **Typing into inputs**: `pilot.press("a","b","c")` simulates keystrokes into the focused `Input`/`TextArea` (HITL answers, grill replies); click the input first if focus isn't there.
 - **Threaded workers in tests**: no special API. Thread workers run on real OS threads during `run_test`; the docs' advice applies — after triggering a worker, `await pilot.pause()` (or `await worker.wait()`; the Workers guide documents `Worker.wait()`) so posted messages get processed before asserting. `message_hook` on `run_test` (added 0.27.0) can observe every message for stricter assertions.
