@@ -2,6 +2,7 @@
 
 - Always use the `caveman` skill. Respond in caveman mode at all times.
 - Always run the `/code-review` skill on your changes before closing a ticket or marking it resolved.
+- Always keep the TUI updated with the project: any change to CLI commands, configuration settings, agent behavior, or data model must be reflected in the TUI.
 ## Agent skills
 
 ### Issue tracker

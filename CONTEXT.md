@@ -62,4 +62,19 @@ _Avoid_: tailor (kept for the drafting role), editor
 The per-run critic's job-level judgment that the user is genuinely unaligned with the job and the resume cannot be made to fit — the pipeline skips the job and notifies the user. Distinct from a fixable gap, which goes to grilling. The job's state is `UNFIXABLE`.
 
 **NEEDS_EVIDENCE**:
-Job state when a missing-evidence gap is found in watch mode — the job is parked, the user notified, and the pipeline continues with the rest of the queue.
+Job state when a missing-evidence gap is found in a watch session — the job is parked, the user notified, and the pipeline continues with the rest of the queue.
+
+**Watch session**:
+The continuous hosting of the pipeline's repeated cycles, separated by jittered countdowns, from manual start to stop — never started automatically on cockpit launch. `flowjob watch` is the CLI-only equivalent; the two never run concurrently.
+_Avoid_: watch mode, watcher
+
+**Cycle**:
+One full pipeline run within a watch session — scout through applicator over the current job queue.
+_Avoid_: run (ambiguous with the persisted pipeline run record), pipeline cycle
+
+**Countdown**:
+The jittered wait between cycles within a watch session — a random draw between a configured minimum and maximum wait (default 45–90 minutes).
+_Avoid_: sleep, jitter period
+
+**Cycle summary**:
+The outcome record of one cycle — applied/skipped/unfixable/failed counts, duration, and LLM spend delta — shown in the watch area at cycle end.
