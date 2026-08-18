@@ -29,6 +29,7 @@ from textual.widgets import (
     Checkbox,
     ContentSwitcher,
     DataTable,
+    Footer,
     Header,
     Input,
     Label,
@@ -43,6 +44,12 @@ from textual.widgets import (
 )
 
 from textual.widgets._option_list import Option
+
+LOGO = r""" _____ _     _____        __  _  ___  ____
+|  ___| |   / _ \ \      / / | |/ _ \| __ )
+| |_  | |  | | | \ \ /\ / /  | | | | |  _ \
+|  _| | |__| |_| |\ V  V / |_| | |_| | |_) |
+|_|   |_____\___/  \_/\_/ \___/ \___/|____/"""
 
 STATES = [
     "NEW",
@@ -271,6 +278,7 @@ class ApprovalRequested(Message):
 
 class DashboardPane(Vertical):
     def compose(self) -> ComposeResult:
+        yield Static(LOGO, id="logo")
         total = len(MOCK_JOBS)
         pending = len(jobs_by_state("PENDING_APPROVAL"))
         spend = sum(cost for _, _, _, _, cost, _, _ in MOCK_LOGS)
@@ -400,7 +408,7 @@ class JobsWorkspace(Vertical):
                 yield JobDetailPane(id="job-detail")
 
     def on_mount(self) -> None:
-        self.query_one(JobsTable).focus()
+        pass
 
     def on_select_changed(self, event: Select.Changed) -> None:
         if event.select.id == "state-filter":
@@ -546,9 +554,35 @@ class VariantBar(Static):
 
 
 class VariantTabs(Screen):
+    BINDINGS = [
+        Binding("1", "go_dashboard", "Dashboard"),
+        Binding("2", "go_jobs", "Jobs"),
+        Binding("3", "go_logs", "LLM Logs"),
+        Binding("4", "go_settings", "Settings"),
+        Binding("5", "go_hitl", "HITL"),
+    ]
+
+    def _switch(self, tab_id: str) -> None:
+        self.query_one(TabbedContent).active = tab_id
+
+    def action_go_dashboard(self) -> None:
+        self._switch("dashboard")
+
+    def action_go_jobs(self) -> None:
+        self._switch("jobs")
+
+    def action_go_logs(self) -> None:
+        self._switch("logs")
+
+    def action_go_settings(self) -> None:
+        self._switch("settings")
+
+    def action_go_hitl(self) -> None:
+        self._switch("hitl")
+
     def compose(self) -> ComposeResult:
         yield Header(show_clock=True)
-        with TabbedContent():
+        with TabbedContent(initial="dashboard"):
             with TabPane("Dashboard", id="dashboard"):
                 yield DashboardPane()
             with TabPane("Jobs", id="jobs"):
@@ -559,7 +593,8 @@ class VariantTabs(Screen):
                 yield SettingsForm()
             with TabPane("HITL", id="hitl"):
                 yield HitlWorkspace(mode="side")
-        yield VariantBar("A — Tabs", "click tabs · jobs split side-by-side")
+        yield Footer()
+        yield VariantBar("A — Tabs", "1-5 switch tabs · jobs split side-by-side")
 
     def on_approval_requested(self, message: ApprovalRequested) -> None:
         set_state(message.job_id, "APPLIED" if message.approve else "REJECTED")
@@ -568,6 +603,35 @@ class VariantTabs(Screen):
 
 
 class VariantSidebar(Screen):
+    BINDINGS = [
+        Binding("d", "nav_dashboard", "Dashboard"),
+        Binding("j", "nav_jobs", "Jobs"),
+        Binding("l", "nav_logs", "LLM Logs"),
+        Binding("s", "nav_settings", "Settings"),
+        Binding("h", "nav_hitl", "HITL"),
+    ]
+
+    def _nav(self, name: str) -> None:
+        self.query_one(ContentSwitcher).active = name
+        nav = self.query_one("#nav", OptionList)
+        index = {"dashboard": 0, "jobs": 1, "logs": 2, "settings": 3, "hitl": 4}[name]
+        nav.highlight_index = index
+
+    def action_nav_dashboard(self) -> None:
+        self._nav("dashboard")
+
+    def action_nav_jobs(self) -> None:
+        self._nav("jobs")
+
+    def action_nav_logs(self) -> None:
+        self._nav("logs")
+
+    def action_nav_settings(self) -> None:
+        self._nav("settings")
+
+    def action_nav_hitl(self) -> None:
+        self._nav("hitl")
+
     def compose(self) -> ComposeResult:
         yield Header(show_clock=True)
         with Horizontal():
@@ -584,7 +648,8 @@ class VariantSidebar(Screen):
                 yield LogsPane(id="logs")
                 yield SettingsForm(id="settings")
                 yield HitlWorkspace(mode="stack", id="hitl")
-        yield VariantBar("B — Sidebar", "left rail nav · jobs stacked vertically")
+        yield Footer()
+        yield VariantBar("B — Sidebar", "d/j/l/s/h switch surfaces · jobs stacked vertically")
 
     def on_option_list_option_selected(self, event: OptionList.OptionSelected) -> None:
         self.query_one(ContentSwitcher).active = event.option.id.removeprefix("nav-")
@@ -624,6 +689,7 @@ class StackDashboard(StackScreen):
     def compose(self) -> ComposeResult:
         yield Header(show_clock=True)
         yield DashboardPane()
+        yield Footer()
         yield VariantBar("C — Keys", "d/j/l/s/h switch surfaces · watch loop here")
 
 
@@ -638,6 +704,7 @@ class StackLogs(StackScreen):
     def compose(self) -> ComposeResult:
         yield Header(show_clock=True)
         yield LogsPane()
+        yield Footer()
         yield VariantBar("C — Keys", "d/j/l/s/h switch surfaces · logs full-screen")
 
 
@@ -645,6 +712,7 @@ class StackSettings(StackScreen):
     def compose(self) -> ComposeResult:
         yield Header(show_clock=True)
         yield SettingsForm()
+        yield Footer()
         yield VariantBar("C — Keys", "d/j/l/s/h switch surfaces · settings full-screen")
 
 
@@ -715,6 +783,7 @@ class CockpitPrototype(App):
     VARIANTS = [VariantTabs, VariantSidebar]
 
     CSS = """
+    #logo { height: 6; color: $accent; text-style: bold; }
     #stat-row { height: 5; }
     .stat-card { width: 1fr; border: round $primary; padding: 0 1; }
     #state-counts { height: 8; }
