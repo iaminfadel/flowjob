@@ -3,6 +3,7 @@ import time
 from urllib.parse import urlparse
 from playwright.sync_api import sync_playwright, TimeoutError as PlaywrightTimeout
 from src.db.models import Job, JobState
+from src.utils.display import display_env
 from datetime import datetime
 
 def generate_id(url: str, title: str, company: str) -> str:
@@ -25,7 +26,8 @@ def scrape_linkedin_jobs(search_url: str, max_jobs: int = 30, headless: bool = F
         browser = p.chromium.launch_persistent_context(
             user_data_dir=user_data_dir,
             headless=headless,
-            args=["--disable-blink-features=AutomationControlled"]
+            env=display_env(),
+            args=["--disable-blink-features=AutomationControlled", "--disable-gpu"]
         )
         page = browser.new_page()
         print(f"Scout navigating to search URL: {search_url}")
