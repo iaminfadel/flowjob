@@ -70,6 +70,23 @@ stdout streamed to the watch log, per-cycle summary (counts, duration, spend
 delta). The watch lockfile (`.flowjob-watch.lock`) prevents CLI/TUI watchers
 from running concurrently.
 
+## Screenshots
+
+Real headless renders against a seeded demo database
+(`uv run python scripts/screenshot_cockpit.py`):
+
+![Dashboard — state counts, LLM spend, watch control](docs/screenshots/dashboard.svg)
+
+![Jobs — state-filtered table with detail pane](docs/screenshots/jobs.svg)
+
+![HITL — approval inbox and grilling chat](docs/screenshots/hitl.svg)
+
+![Approval gate — modal before applying](docs/screenshots/approval.svg)
+
+![LLM Logs — interaction viewer and spend totals](docs/screenshots/logs.svg)
+
+![Settings — structured forms with guardrail bounds](docs/screenshots/settings.svg)
+
 ## Configuration
 
 `flowjob.yaml` at the project root (or `--config`). The `watch:` section is
@@ -89,4 +106,5 @@ for headed Playwright launches (VNC/SSH -X setups).
 ```bash
 uv run pytest            # unit + integration suites, Textual Pilot tests
 uv run mypy src/tui src/pipeline/watch_lock.py src/pipeline/retry.py src/agents/applicator.py --explicit-package-bases
+uv run python scripts/screenshot_cockpit.py   # regenerate docs/screenshots/*.svg
 ```
