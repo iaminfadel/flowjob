@@ -1,9 +1,11 @@
 import hashlib
 import time
 from urllib.parse import urlparse
-from playwright.sync_api import sync_playwright, TimeoutError as PlaywrightTimeout
+from typing import Optional
+from playwright.sync_api import TimeoutError as PlaywrightTimeout
 from src.db.models import Job, JobState
 from src.utils.display import display_env
+from src.browser.driver import BrowserDriver, get_browser_driver
 from datetime import datetime
 
 def generate_id(url: str, title: str, company: str) -> str:
@@ -18,18 +20,12 @@ def clean_url(raw_url: str) -> str:
         return raw_url.split("?")[0]
     return f"{parsed.scheme}://{parsed.netloc}{parsed.path}"
 
-def scrape_linkedin_jobs(search_url: str, max_jobs: int = 30, headless: bool = False, user_data_dir: str = "browser_data") -> list[Job]:
+def scrape_linkedin_jobs(search_url: str, max_jobs: int = 30, headless: bool = False, user_data_dir: str = "browser_data", driver: Optional[BrowserDriver] = None) -> list[Job]:
     """Scrapes LinkedIn Easy Apply jobs using Playwright robust URL extraction."""
+    driver = driver or get_browser_driver()
     jobs = []
     
-    with sync_playwright() as p:
-        browser = p.chromium.launch_persistent_context(
-            user_data_dir=user_data_dir,
-            headless=headless,
-            env=display_env(),
-            args=["--disable-blink-features=AutomationControlled", "--disable-gpu"]
-        )
-        page = browser.new_page()
+    with driver.session(headless=headless) as page:
         print(f"Scout navigating to search URL: {search_url}")
         try:
             page.goto(search_url, wait_until="domcontentloaded", timeout=60000)
@@ -77,17 +73,7 @@ def scrape_linkedin_jobs(search_url: str, max_jobs: int = 30, headless: bool = F
         
         if not job_urls:
             print("No jobs found on search page after all attempts. Dumping DOM.")
-            import os
-            os.makedirs("data", exist_ok=True)
-            with open("data/debug_scout_dom.html", "w", encoding="utf-8") as f:
-                f.write(page.content())
-            # Take a screenshot too for visual debugging
-            try:
-                page.screenshot(path="data/debug_scout_screenshot.png", full_page=True)
-                print("Screenshot saved to data/debug_scout_screenshot.png")
-            except Exception:
-                pass
-            browser.close()
+            driver.capture_diagnostics(page, tag="debug_scout")
             return []
             
         # 2. Visit each job directly
@@ -214,6 +200,4 @@ def scrape_linkedin_jobs(search_url: str, max_jobs: int = 30, headless: bool = F
                 print(f"Error scraping job {url}: {e}")
                 continue
                 
-        browser.close()
-        
     return jobs

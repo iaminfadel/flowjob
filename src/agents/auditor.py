@@ -109,12 +109,12 @@ def audit_bullet(bullet: str, llm=None, agent_name: str = "Auditor", job_id: str
         issues=issues
     )
 
-def audit_master_resume(master_resume_path: str = "master_resume.md", llm=None, model_name: str = "google/gemini-2.5-pro", agent_name: str = "Auditor", job_id: str = "") -> BankAuditReport:
+def audit_master_resume(master_resume_path: str = "master_resume.md", llm=None, model_name: str = "google/gemini-2.5-pro", agent_name: str = "Auditor", job_id: str = "", auto_load_llm: bool = False) -> BankAuditReport:
     _, md_content = parse_master_resume(master_resume_path)
     bullets = extract_bullets(md_content)
     
     providers = None
-    if llm is None and has_provider_keys():
+    if llm is None and auto_load_llm and has_provider_keys():
         providers = load_providers()
         if providers:
             llm = create_chat(providers[0], temperature=0.0)

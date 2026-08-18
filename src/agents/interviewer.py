@@ -9,7 +9,8 @@ from src.agents.structured_llm import invoke_with_schema_tool
 from src.agents.auditor import audit_bullet
 from src.agents.writer import EditResumeTool, execute_edit
 from src.agents.llm_factory import load_providers, create_chat, invoke_llm, Provider, order_providers, mark_provider_failure, session_extra_body
-from src.pipeline.orchestrator import load_draft_json, save_draft_json
+from src.storage.document_store import DiskDocumentStore
+from src.agents.grilling_session import GrillingSession
 
 class SynthesizedSTARBullet(BaseModel):
     bullet: str = Field(description="A high-impact resume bullet formatted in STAR/X-Y-Z formula with numbers/metrics")
@@ -129,111 +130,12 @@ def run_grilling_session(
         print(f"❌ Job {job_id} not found in database.")
         return False
         
-    transcript_data = job.grilling_transcript or {}
-    gaps = transcript_data.setdefault("gaps", {})
-    
-    if not gaps:
-        print("No gaps recorded for grilling.")
-        job.state = JobState.DRAFTED
-        flag_modified(job, "grilling_transcript")
-        session.commit()
-        return True
+    grill = GrillingSession(
+        session=session,
+        job=job,
+        providers=providers,
+        llm=llm,
+        model_name=model_name,
+    )
+    return grill.run_cli(input_fn=input_fn, output_fn=print, max_turns_per_gap=max_turns_per_gap)
 
-    print(f"\n🎙️ Starting Grilling Session for: {job.title} at {job.company}")
-    print("=" * 60)
-
-    draft_data = load_draft_json(job.id)
-
-    for req_text, gap_info in gaps.items():
-        if gap_info.get("status") in ("completed", "dropped"):
-            continue
-            
-        print(f"\n🎯 Target Gap: {req_text}")
-        turns = gap_info.setdefault("turns", [])
-        
-        while len(turns) < max_turns_per_gap * 2:
-            question = generate_interview_question(req_text, turns, model_name=model_name, llm=llm, providers=providers, job_id=job_id)
-            print(f"\n🤖 Interviewer: {question}")
-            turns.append({"role": "interviewer", "text": question})
-            
-            # Atomic commit to DB
-            transcript_data["active_requirement"] = req_text
-            job.grilling_transcript = json.loads(json.dumps(transcript_data))
-            session.add(job)
-            session.commit()
-            
-            answer = input_fn("\n👤 You: ")
-            if not answer or answer.strip().lower() in ("skip", "drop", "no experience"):
-                print("⏭️ Dropping requirement.")
-                gap_info["status"] = "dropped"
-                job.grilling_transcript = json.loads(json.dumps(transcript_data))
-                session.add(job)
-                session.commit()
-                break
-                
-            turns.append({"role": "candidate", "text": answer})
-            job.grilling_transcript = json.loads(json.dumps(transcript_data))
-            session.add(job)
-            session.commit()
-            
-            # If we have at least 1 candidate answer, attempt synthesis
-            candidate_turns = [t for t in turns if t["role"] == "candidate"]
-            if len(candidate_turns) >= 2 or len(turns) >= 4:
-                synth = synthesize_star_bullet(req_text, turns, model_name=model_name, llm=llm, providers=providers, job_id=job_id)
-                print(f"\n✨ Proposed Resume Bullet:\n   {synth.bullet}")
-                
-                confirm = input_fn("\nAccept this bullet? (y/n/edit): ").strip().lower()
-                if confirm in ("y", "yes", ""):
-                    # Run bullet audit
-                    audit_res = audit_bullet(synth.bullet, llm=llm)
-                    if not audit_res.passed:
-                        print(f"⚠️ Auditor warnings: {', '.join(audit_res.issues)}")
-                    
-                    # Apply to draft JSON
-                    edit_tool = EditResumeTool(
-                        target="draft",
-                        op="add",
-                        section="work",
-                        index=0,
-                        content=synth.bullet
-                    )
-                    draft_data, status = execute_edit(edit_tool, draft_data)
-                    save_draft_json(job.id, draft_data)
-                    
-                    gap_info["status"] = "completed"
-                    gap_info["synthesized_bullet"] = synth.bullet
-                    job.grilling_transcript = json.loads(json.dumps(transcript_data))
-                    session.add(job)
-                    session.commit()
-                    print(f"✅ Bullet committed to draft resume!")
-                    break
-                elif confirm == "edit":
-                    custom_bullet = input_fn("Enter edited bullet: ").strip()
-                    if custom_bullet:
-                        edit_tool = EditResumeTool(
-                            target="draft",
-                            op="add",
-                            section="work",
-                            index=0,
-                            content=custom_bullet
-                        )
-                        draft_data, _ = execute_edit(edit_tool, draft_data)
-                        save_draft_json(job.id, draft_data)
-                        gap_info["status"] = "completed"
-                        gap_info["synthesized_bullet"] = custom_bullet
-                        job.grilling_transcript = json.loads(json.dumps(transcript_data))
-                        session.add(job)
-                        session.commit()
-                        print(f"✅ Custom bullet committed to draft resume!")
-                        break
-
-    # If all gaps resolved or dropped, transition back to DRAFTED for pipeline convergence
-    all_done = all(g.get("status") in ("completed", "dropped") for g in gaps.values())
-    if all_done:
-        job.state = JobState.DRAFTED
-        print(f"\n🎉 All evidence gathered for Job {job.id}! State updated -> DRAFTED.")
-    
-    job.grilling_transcript = json.loads(json.dumps(transcript_data))
-    session.add(job)
-    session.commit()
-    return True

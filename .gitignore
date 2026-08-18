@@ -12,6 +12,8 @@ browser_data/
 
 # Databases
 *.db
+*.db-shm
+*.db-wal
 *.sqlite3
 
 # Secrets & PII (must never reach a public repo)

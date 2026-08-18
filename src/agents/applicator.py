@@ -1,10 +1,10 @@
 import os
 import random
 import time
-from typing import Callable
-from playwright.sync_api import sync_playwright, TimeoutError
+from typing import Callable, Optional
+from playwright.sync_api import TimeoutError
 from src.agents.runner import AgentRunner
-from src.utils.display import display_env
+from src.browser.driver import BrowserDriver, get_browser_driver
 
 class ApplicatorAgent(AgentRunner):
     """
@@ -12,12 +12,16 @@ class ApplicatorAgent(AgentRunner):
     Uses headed Playwright with persistent state to avoid anti-bot detection.
     Pauses and prompts the user via CLI for unknown form fields.
     """
+    def __init__(self, client=None, driver: Optional[BrowserDriver] = None):
+        super().__init__(client=client)
+        self.driver = driver or get_browser_driver()
+
     def _random_sleep(self, min_s: float, max_s: float):
         time.sleep(random.uniform(min_s, max_s))
 
     def _modal_loop(self, page, wait_fn) -> bool:
         """Drive the Easy Apply modal; blocks via wait_fn on unknown-form-field pauses."""
-        browser_data_dir = "browser_data"
+        browser_data_dir = getattr(self.driver, "user_data_dir", "browser_data")
         while True:
             # Look for Next, Review, or Submit buttons
             next_btn = page.get_by_role("button", name="Next", exact=True).first
@@ -46,9 +50,8 @@ class ApplicatorAgent(AgentRunner):
                 error_alert = page.get_by_role("alert").first
                 if error_alert.is_visible():
                     print("[Applicator] Form error detected (missing field).")
-                    # Take screenshot
-                    screenshot_path = os.path.join(browser_data_dir, "unknown_field.png")
-                    page.screenshot(path=screenshot_path)
+                    diag = self.driver.capture_diagnostics(page, tag="unknown_field")
+                    screenshot_path = diag.get("screenshot", "unknown_field.png")
                     print(f"[Applicator] Screenshot saved to {screenshot_path}")
                     
                     # Block and wait for human input
@@ -61,31 +64,17 @@ class ApplicatorAgent(AgentRunner):
             
             # If we reach here, we are stuck or done
             print("[Applicator] No Next/Review/Submit buttons found. Check if application completed.")
-            # Take screenshot just in case
-            screenshot_path = os.path.join(browser_data_dir, "stuck.png")
-            page.screenshot(path=screenshot_path)
+            diag = self.driver.capture_diagnostics(page, tag="stuck")
+            screenshot_path = diag.get("screenshot", "stuck.png")
             print(f"[Applicator] Stuck. Screenshot saved to {screenshot_path}. Aborting.")
             return False
 
     def run(self, job, wait_fn: Callable[[str], None] | None = None) -> bool:
-        browser_data_dir = "browser_data"
-        os.makedirs(browser_data_dir, exist_ok=True)
-        
         print(f"\n[Applicator] Starting automation for {job.title} at {job.company}")
         print("[Applicator] Opening browser...")
         
-        with sync_playwright() as p:
-            # Always run headed with persistent context
-            context = p.chromium.launch_persistent_context(
-                user_data_dir=browser_data_dir,
-                headless=False,
-                env=display_env(),
-                viewport={"width": 1280, "height": 720}
-            )
-            
-            page = context.new_page()
-            
-            try:
+        try:
+            with self.driver.session(headless=False) as page:
                 # Add jitter before navigation
                 self._random_sleep(1.0, 3.0)
                 page.goto(job.url)
@@ -110,9 +99,9 @@ class ApplicatorAgent(AgentRunner):
                 self._random_sleep(1.0, 2.0)
                 
                 return self._modal_loop(page, wait_fn or input)
-                
-            except Exception as e:
-                print(f"[Applicator] Error during automation: {e}")
-                return False
-            finally:
-                context.close()
+        except Exception as e:
+            if str(e) == "CAPTCHA_DETECTED":
+                raise
+            print(f"[Applicator] Error during automation: {e}")
+            return False
+
