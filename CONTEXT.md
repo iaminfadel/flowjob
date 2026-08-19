@@ -64,6 +64,14 @@ The per-run critic's job-level judgment that the user is genuinely unaligned wit
 **NEEDS_EVIDENCE**:
 Job state when a missing-evidence gap is found in a watch session — the job is parked, the user notified, and the pipeline continues with the rest of the queue.
 
+**Manual application**:
+A job application filed by the human directly, outside the pipeline — logged with slim, all-optional details (title, company, url, date applied, cv, state, notes, job description). The pipeline never processes it.
+_Avoid_: manual job (ambiguous with the Job row), hand application
+
+**Pipeline application**:
+A job application filed by the Applicator agent through the normal pipeline — carries the full artifact set (jd, fit/edit scores, tailor metadata, grilling transcript).
+_Avoid_: auto application, automated application
+
 **Watch session**:
 The continuous hosting of the pipeline's repeated cycles, separated by jittered countdowns, from manual start to stop — never started automatically on cockpit launch. `flowjob watch` is the CLI-only equivalent; the two never run concurrently.
 _Avoid_: watch mode, watcher

@@ -1,7 +1,7 @@
 from enum import Enum
 from typing import Optional, Literal
 from sqlmodel import SQLModel, Field, Column
-from sqlalchemy import JSON
+from sqlalchemy import JSON, String, CheckConstraint
 from pydantic import BaseModel
 
 class FitScore(BaseModel):
@@ -40,6 +40,14 @@ class Job(SQLModel, table=True):
     cv_path: Optional[str] = None
     fit_score: Optional[int] = None
     edit_score: Optional[int] = None
+    source: str = Field(
+        default="pipeline",
+        sa_column=Column(
+            String,
+            CheckConstraint("source IN ('manual', 'pipeline')", name="ck_job_source"),
+        ),
+    )
+    notes: str = ""
 
 class ErrorRecord(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)

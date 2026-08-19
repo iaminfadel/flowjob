@@ -52,6 +52,8 @@ def job_to_dict(job: Job) -> dict:
         "grilling_transcript": job.grilling_transcript or {},
         "tailor_metadata": job.tailor_metadata or {},
         "date_applied": job.date_applied,
+        "source": job.source,
+        "notes": job.notes,
     }
 
 

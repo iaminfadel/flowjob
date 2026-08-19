@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
 from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import Any, Optional, Union
@@ -54,6 +55,11 @@ class DocumentStore(ABC):
     @abstractmethod
     def get_cv_path(self, job_id: str) -> Optional[str]:
         """Return the path/URI to the compiled PDF if it exists, else None."""
+        pass
+
+    @abstractmethod
+    def store_manual_cv(self, job_id: str, source_path: str) -> str:
+        """Copy an arbitrary resume file into the job's directory; return its path."""
         pass
 
 
@@ -170,6 +176,14 @@ class DiskDocumentStore(DocumentStore):
             return json_path
         return None
 
+    def store_manual_cv(self, job_id: str, source_path: str) -> str:
+        src = Path(source_path)
+        job_dir = self._job_dir(job_id)
+        os.makedirs(job_dir, exist_ok=True)
+        dest = os.path.join(job_dir, f"cv{src.suffix}" if src.suffix else "cv")
+        shutil.copy2(src, dest)
+        return dest
+
 
 class InMemoryDocumentStore(DocumentStore):
     """Pure in-memory test adapter with zero disk I/O and zero external dependencies."""
@@ -222,3 +236,7 @@ class InMemoryDocumentStore(DocumentStore):
         if job_id in self._drafts:
             return f"memory://resumes/{job_id}/resume.json"
         return None
+
+    def store_manual_cv(self, job_id: str, source_path: str) -> str:
+        src = Path(source_path)
+        return f"memory://resumes/{job_id}/cv{src.suffix if src.suffix else ''}"
