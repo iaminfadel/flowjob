@@ -20,6 +20,7 @@ from sqlmodel import Session, select
 from src.agents.runner import AgentRunner
 from src.agents.scout import scrape_linkedin_jobs
 from src.db.models import ErrorRecord, Job, JobState, PipelineRun
+from src.db.store import is_manual_application, pipeline_only
 from src.storage.document_store import DiskDocumentStore, DocumentStore
 from src.tools.browser import check_session_health
 from src.utils.resume_parser import parse_master_resume
@@ -227,6 +228,9 @@ class PipelineCycleEngine:
             if not job:
                 continue
 
+            if is_manual_application(job):
+                continue
+
             if job.state == JobState.TAILOR_FAIL:
                 job.state = JobState.ANALYZED
                 count += 1
@@ -251,7 +255,7 @@ class PipelineCycleEngine:
             return True
 
         min_fit_score = self.config.get("analyst", {}).get("min_fit_score", 70)
-        statement = select(Job).where(Job.state == JobState.NEW)
+        statement = pipeline_only(select(Job).where(Job.state == JobState.NEW))
         new_jobs = session.exec(statement).all()
         print(f"Found {len(new_jobs)} NEW jobs.")
 
@@ -278,7 +282,7 @@ class PipelineCycleEngine:
         if not tailor_agent:
             return True
 
-        statement = select(Job).where(Job.state == JobState.ANALYZED)
+        statement = pipeline_only(select(Job).where(Job.state == JobState.ANALYZED))
         analyzed_jobs = session.exec(statement).all()
         print(f"Found {len(analyzed_jobs)} ANALYZED jobs.")
 
@@ -313,7 +317,7 @@ class PipelineCycleEngine:
         if not (critic_agent and writer_agent):
             return True
 
-        statement = select(Job).where(Job.state == JobState.DRAFTED)
+        statement = pipeline_only(select(Job).where(Job.state == JobState.DRAFTED))
         drafted_jobs = session.exec(statement).all()
         if not drafted_jobs:
             return True
@@ -421,7 +425,7 @@ class PipelineCycleEngine:
         if not editor_agent:
             return True
 
-        statement = select(Job).where(Job.state == JobState.DRAFTED)
+        statement = pipeline_only(select(Job).where(Job.state == JobState.DRAFTED))
         drafted_jobs = session.exec(statement).all()
         print(f"Found {len(drafted_jobs)} DRAFTED jobs.")
 
@@ -463,7 +467,7 @@ class PipelineCycleEngine:
         return True
 
     def process_edited_jobs(self, session: Session) -> None:
-        statement = select(Job).where(Job.state == JobState.EDITED)
+        statement = pipeline_only(select(Job).where(Job.state == JobState.EDITED))
         edited_jobs = session.exec(statement).all()
         print(f"Found {len(edited_jobs)} EDITED jobs.")
 
@@ -478,7 +482,7 @@ class PipelineCycleEngine:
         if not applicator_agent:
             return True
 
-        statement = select(Job).where(Job.state == JobState.PENDING_APPROVAL)
+        statement = pipeline_only(select(Job).where(Job.state == JobState.PENDING_APPROVAL))
         pending_jobs = session.exec(statement).all()
         if pending_jobs:
             print(f"Found {len(pending_jobs)} PENDING_APPROVAL jobs.")

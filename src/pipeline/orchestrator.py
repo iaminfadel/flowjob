@@ -13,7 +13,7 @@ from typing import Any, Callable, Dict, Optional
 
 from sqlmodel import Session, select
 
-from src.db.store import init_db, get_session
+from src.db.store import init_db, get_session, is_manual_application, pipeline_only
 from src.db.models import Job, JobState, ErrorRecord, PipelineRun
 from src.agents.runner import AgentRunner
 from src.agents.scout import scrape_linkedin_jobs
@@ -187,6 +187,9 @@ def process_retries(session: Session) -> None:
         if not job:
             continue
 
+        if is_manual_application(job):
+            continue
+
         if job.state == JobState.TAILOR_FAIL:
             job.state = JobState.ANALYZED
             count += 1
@@ -207,7 +210,7 @@ def process_retries(session: Session) -> None:
 
 def process_new_jobs(session: Session, config: dict, analyst_agent: Any) -> None:
     min_fit_score = config.get("analyst", {}).get("min_fit_score", 70)
-    statement = select(Job).where(Job.state == JobState.NEW)
+    statement = pipeline_only(select(Job).where(Job.state == JobState.NEW))
     new_jobs = session.exec(statement).all()
     print(f"Found {len(new_jobs)} NEW jobs.")
 
@@ -230,7 +233,7 @@ def process_new_jobs(session: Session, config: dict, analyst_agent: Any) -> None
 
 
 def process_analyzed_jobs(session: Session, tailor_agent: Any, doc_generator: Optional[Any] = None) -> None:
-    statement = select(Job).where(Job.state == JobState.ANALYZED)
+    statement = pipeline_only(select(Job).where(Job.state == JobState.ANALYZED))
     analyzed_jobs = session.exec(statement).all()
     print(f"Found {len(analyzed_jobs)} ANALYZED jobs.")
 
@@ -267,7 +270,7 @@ def process_evidence_loop(
     doc_generator: Optional[Any] = None,
     interactive: bool = False,
 ) -> None:
-    statement = select(Job).where(Job.state == JobState.DRAFTED)
+    statement = pipeline_only(select(Job).where(Job.state == JobState.DRAFTED))
     drafted_jobs = session.exec(statement).all()
     if not drafted_jobs:
         return
@@ -373,7 +376,7 @@ def process_evidence_loop(
 
 
 def process_drafted_jobs(session: Session, editor_agent: Any, doc_generator: Optional[Any] = None) -> None:
-    statement = select(Job).where(Job.state == JobState.DRAFTED)
+    statement = pipeline_only(select(Job).where(Job.state == JobState.DRAFTED))
     drafted_jobs = session.exec(statement).all()
     print(f"Found {len(drafted_jobs)} DRAFTED jobs.")
 
@@ -424,7 +427,7 @@ def process_drafted_jobs(session: Session, editor_agent: Any, doc_generator: Opt
 
 
 def process_edited_jobs(session: Session) -> None:
-    statement = select(Job).where(Job.state == JobState.EDITED)
+    statement = pipeline_only(select(Job).where(Job.state == JobState.EDITED))
     edited_jobs = session.exec(statement).all()
     print(f"Found {len(edited_jobs)} EDITED jobs.")
 
@@ -441,7 +444,7 @@ def process_pending_approval_jobs(
     approval_fn: Optional[Callable] = None,
     wait_fn: Optional[Callable] = None,
 ) -> None:
-    statement = select(Job).where(Job.state == JobState.PENDING_APPROVAL)
+    statement = pipeline_only(select(Job).where(Job.state == JobState.PENDING_APPROVAL))
     pending_jobs = session.exec(statement).all()
     if pending_jobs:
         print(f"Found {len(pending_jobs)} PENDING_APPROVAL jobs.")

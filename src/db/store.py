@@ -1,5 +1,6 @@
 import hashlib
 from datetime import datetime
+from typing import Optional
 
 from sqlmodel import SQLModel, create_engine, Session
 
@@ -78,4 +79,124 @@ def generate_manual_job_id(url: str = "", title: str = "", company: str = "") ->
     """
     raw = f"{url}{title}{company}{datetime.now().isoformat()}".encode("utf-8")
     return hashlib.sha256(raw).hexdigest()[:12]
+
+
+def build_manual_job(
+    *,
+    title: str = "",
+    company: str = "",
+    url: str = "",
+    jd_text: str = "",
+    notes: str = "",
+    cv_path: Optional[str] = None,
+    state: Optional["JobState"] = None,
+    date_applied: Optional[str] = None,
+) -> "Job":
+    """Construct a Job row for a manual application.
+
+    At least one identifying field (title/company/url) is required; the
+    id is a uniqueness key, not a dedup key (see generate_manual_job_id).
+    Defaults: source=manual, state=APPLIED, date_applied=today. The caller
+    owns persistence (save_job) and the cv copy
+    (DocumentStore.store_manual_cv).
+    """
+    from src.db.models import SOURCE_MANUAL, Job, JobState
+
+    if not title and not company and not url:
+        raise ValueError("Provide at least one of title, company, url.")
+
+    if state is None:
+        state = JobState.APPLIED
+    return Job(
+        id=generate_manual_job_id(url=url, title=title, company=company),
+        url=url,
+        title=title,
+        company=company,
+        location="",
+        posted_date="",
+        jd_text=jd_text,
+        state=state,
+        date_applied=date_applied or datetime.now().strftime("%Y-%m-%d"),
+        cv_path=cv_path,
+        source=SOURCE_MANUAL,
+        notes=notes,
+    )
+
+
+def create_manual_job(
+    engine,
+    *,
+    title: str = "",
+    company: str = "",
+    url: str = "",
+    jd_text: str = "",
+    notes: str = "",
+    cv: Optional[str] = None,
+    state: Optional["JobState"] = None,
+    date_applied: Optional[str] = None,
+) -> tuple[str, Optional[str], bool]:
+    """Build, copy the CV into the resume store, and persist a manual
+    application in one call.
+
+    Returns (job_id, copied_cv, saved): job_id is the generated id
+    (uniqueness key, not a dedup key); copied_cv is the path the CV was
+    copied to (None when no CV was given); saved is False when a row with
+    that id already exists — the copied CV is rolled back in that case.
+    Raises ValueError for missing identifying fields or a CV path that
+    does not exist.
+    """
+    import os
+
+    from src.storage.document_store import DiskDocumentStore
+
+    job = build_manual_job(
+        title=title,
+        company=company,
+        url=url,
+        jd_text=jd_text,
+        notes=notes,
+        state=state,
+        date_applied=date_applied,
+    )
+    job_id = job.id
+
+    copied_cv = None
+    if cv:
+        if not os.path.isfile(cv):
+            raise ValueError(f"CV file not found: {cv}")
+        copied_cv = DiskDocumentStore().store_manual_cv(job_id, cv)
+        job.cv_path = copied_cv
+
+    if not save_job(engine, job):
+        if copied_cv:
+            os.remove(copied_cv)
+        return job_id, None, False
+    return job_id, copied_cv, True
+
+
+def pipeline_only(statement):
+    """Restrict a job-selecting statement to pipeline applications."""
+    from src.db.models import SOURCE_MANUAL, Job
+
+    return statement.where(Job.source != SOURCE_MANUAL)
+
+
+def is_manual_application(job) -> bool:
+    """True when the row is a manual application (never pipeline work)."""
+    from src.db.models import SOURCE_MANUAL
+
+    return getattr(job, "source", None) == SOURCE_MANUAL
+
+
+def find_jobs_by_url(engine, url: str) -> list:
+    """Return existing rows sharing a url (empty when url is blank)."""
+    from sqlmodel import select
+
+    if not url:
+        return []
+    from src.db.models import Job
+
+    with get_session(engine) as session:
+        statement = select(Job).where(Job.url == url)
+        return list(session.exec(statement).all())
 

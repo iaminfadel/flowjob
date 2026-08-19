@@ -1,8 +1,8 @@
 import typer
 import sys
-from pathlib import Path
 from src.config import load_config
-from src.db.store import init_db
+from src.db.store import init_db, pipeline_only
+from src.db.models import JobState
 from scripts.validate_resume import validate_resume as do_validate_resume
 
 app = typer.Typer(help="FlowJob: Agentic Job Application Pipeline", no_args_is_help=True)
@@ -138,7 +138,7 @@ def status(config: str = typer.Option("flowjob.yaml", help="Path to the configur
 
     with get_session(engine) as session:
         def count_state(state):
-            statement = select(func.count(Job.id)).where(Job.state == state)
+            statement = pipeline_only(select(func.count(Job.id)).where(Job.state == state))
             return session.exec(statement).one()
 
         new_count = count_state(JobState.NEW)
@@ -167,6 +167,81 @@ def status(config: str = typer.Option("flowjob.yaml", help="Path to the configur
     typer.echo(f"  APPLIED: {applied_count}")
     typer.echo(f"  FAILED: {failed_count}")
     typer.echo(f"\n🕒 Last successful cycle: {last_cycle}")
+
+@app.command()
+def add(
+    title: str = typer.Option("", help="Job title"),
+    company: str = typer.Option("", help="Company name"),
+    url: str = typer.Option("", help="Job posting URL"),
+    jd: str = typer.Option("", "--jd", help="Job description (pasted; no URL fetching)"),
+    notes: str = typer.Option("", help="Free-form notes for this application"),
+    cv: str = typer.Option(None, help="Path to a resume/CV file; copied into the resume store"),
+    state: JobState = typer.Option(JobState.APPLIED, help="Initial state"),
+    date_applied: str = typer.Option(None, help="Date applied (defaults to today)"),
+    config: str = typer.Option("flowjob.yaml", help="Path to the configuration file"),
+):
+    """Log a manual application — filed by hand, outside the pipeline."""
+    from src.config import load_config
+    from src.db.store import init_db, create_manual_job, find_jobs_by_url
+
+    conf = load_config(config)
+    engine = init_db(conf.data.db_path)
+
+    try:
+        job_id, _, saved = create_manual_job(
+            engine,
+            title=title,
+            company=company,
+            url=url,
+            jd_text=jd,
+            notes=notes,
+            cv=cv,
+            state=state,
+            date_applied=date_applied,
+        )
+    except ValueError as e:
+        typer.echo(f"❌ {e}")
+        raise typer.Exit(code=1)
+
+    new_id = job_id
+    new_state = state.value
+    label = f"{title} at {company}" if title or company else ""
+    if not saved:
+        typer.echo(f"❌ A job with id {new_id} already exists — nothing saved.")
+        raise typer.Exit(code=1)
+
+    if url:
+        existing = find_jobs_by_url(engine, url)
+        if existing:
+            ids = ", ".join(j.id for j in existing)
+            typer.echo(f"⚠️  A job with this URL already exists ({ids}) — creating a separate row.")
+
+    typer.echo(f"✅ Logged manual application [{new_id}] {label} — {new_state} (source: manual)")
+
+@app.command()
+def update(
+    job_id: str = typer.Argument(..., help="Job ID to update"),
+    state: JobState = typer.Option(..., help="New state (e.g. REJECTED to track rejections)"),
+    config: str = typer.Option("flowjob.yaml", help="Path to the configuration file"),
+):
+    """Flip any job's state (manual or pipeline) — e.g. mark a rejection."""
+    from src.config import load_config
+    from src.db.store import init_db, get_session
+    from src.db.models import Job
+
+    conf = load_config(config)
+    engine = init_db(conf.data.db_path)
+
+    with get_session(engine) as session:
+        job = session.get(Job, job_id)
+        if not job:
+            typer.echo(f"❌ No job with id {job_id}.")
+            raise typer.Exit(code=1)
+        old = job.state
+        job.state = state
+        session.commit()
+        label = f"{job.title} at {job.company}" if job.title or job.company else job.id
+        typer.echo(f"✅ {label}: {old.value} → {state.value} (source: {job.source})")
 
 @app.command("audit-bank")
 def audit_bank(resume: str = typer.Option("master_resume.md", help="Path to the master resume")):
@@ -212,7 +287,7 @@ def grill(
     
     with get_session(engine) as session:
         if not job_id:
-            statement = select(Job).where(Job.state == JobState.NEEDS_EVIDENCE)
+            statement = pipeline_only(select(Job).where(Job.state == JobState.NEEDS_EVIDENCE))
             pending_jobs = session.exec(statement).all()
             if not pending_jobs:
                 typer.echo("ℹ️ No jobs currently waiting for evidence.")

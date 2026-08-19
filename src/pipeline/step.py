@@ -1,6 +1,7 @@
 from typing import Optional, Callable
 from sqlmodel import select, Session
 from src.db.models import Job, JobState, ErrorRecord
+from src.db.store import pipeline_only
 from src.agents.runner import AgentRunner
 import traceback
 from datetime import datetime
@@ -61,7 +62,7 @@ class PipelineStep:
         session.commit()
 
     def process(self, session: Session):
-        statement = select(Job).where(Job.state == self.source_state)
+        statement = pipeline_only(select(Job).where(Job.state == self.source_state))
         jobs = session.exec(statement).all()
         
         for job in jobs:

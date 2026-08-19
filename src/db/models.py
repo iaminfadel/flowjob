@@ -4,6 +4,9 @@ from sqlmodel import SQLModel, Field, Column
 from sqlalchemy import JSON, String, CheckConstraint
 from pydantic import BaseModel
 
+SOURCE_MANUAL = "manual"
+SOURCE_PIPELINE = "pipeline"
+
 class FitScore(BaseModel):
     score: int
     matching_skills: list[str]
@@ -41,7 +44,7 @@ class Job(SQLModel, table=True):
     fit_score: Optional[int] = None
     edit_score: Optional[int] = None
     source: str = Field(
-        default="pipeline",
+        default=SOURCE_PIPELINE,
         sa_column=Column(
             String,
             CheckConstraint("source IN ('manual', 'pipeline')", name="ck_job_source"),

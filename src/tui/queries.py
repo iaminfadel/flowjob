@@ -75,11 +75,13 @@ def total_jobs() -> int:
     return with_session(_run)
 
 
-def jobs(state_filter: str | None = None) -> list[dict]:
+def jobs(state_filter: str | None = None, source_filter: str | None = None) -> list[dict]:
     def _run(session):
         stmt = select(Job)
         if state_filter and state_filter != "ALL":
             stmt = stmt.where(Job.state == state_filter)
+        if source_filter and source_filter != "ALL":
+            stmt = stmt.where(Job.source == source_filter)
         stmt = stmt.order_by(Job.state, Job.company)
         return [job_to_dict(j) for j in session.exec(stmt).all()]
 
@@ -164,7 +166,11 @@ def grilling_gaps(job_id: str) -> dict:
 
 
 def requeue_job(job_id: str) -> str | None:
-    """Re-queue a failed job (retry action); returns the target state or None."""
+    """Re-queue a failed job (retry action); returns the target state or None.
+
+    Manual applications are refused — they are never pipeline work, even when
+    their state looks pipeline-like.
+    """
 
     def _run(session):
         from src.pipeline.retry import requeue_failed_job
@@ -172,7 +178,27 @@ def requeue_job(job_id: str) -> str | None:
         job = session.get(Job, job_id)
         if not job:
             return None
-        target = requeue_failed_job(session, job)
+        try:
+            target = requeue_failed_job(session, job)
+        except ValueError:
+            return None
         return target.value
+
+    return with_session(_run)
+
+
+def set_job_state(job_id: str, state: str) -> str | None:
+    """Flip any job's state (manual or pipeline); returns the new state or None."""
+
+    def _run(session):
+        job = session.get(Job, job_id)
+        if not job:
+            return None
+        try:
+            job.state = JobState(state)
+        except ValueError:
+            return None
+        session.commit()
+        return job.state.value
 
     return with_session(_run)

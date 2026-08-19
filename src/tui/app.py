@@ -18,7 +18,9 @@ from src.tui.pause import PauseManager, PauseRequested
 from src.tui import queries
 from src.tui.watch import CycleSummary, WatchManager, WatchOutput, WatchStateChanged
 from src.tui.widgets import (
+    AddJobModal,
     ApprovalModal,
+    ChangeStateModal,
     DashboardPane,
     HitlWorkspace,
     JobDetailPane,
@@ -77,12 +79,29 @@ Screen {
     height: 100%;
 }
 
+#jobs-filters {
+    height: auto;
+    margin-bottom: 1;
+}
+
+#jobs-filters > Select {
+    width: 1fr;
+}
+
 #state-filter {
     margin-bottom: 1;
 }
 
 #jobs-table {
     height: 1fr;
+}
+
+#add-form > TextArea {
+    height: 4;
+}
+
+#add-form > Input, #add-form > Select, #add-form > Label {
+    margin-bottom: 1;
 }
 
 #job-detail {
@@ -221,6 +240,8 @@ class CockpitApp(App):
         Binding("t", "retry", "Retry", show=False),
         Binding("o", "open_url", "Open URL", show=False),
         Binding("d", "open_dir", "Open resume dir", show=False),
+        Binding("m", "add_manual", "Log manual application", show=False),
+        Binding("s", "change_state", "Change state", show=False),
         Binding("ctrl+r", "refresh", "Refresh", show=False),
     ]
 
@@ -266,7 +287,7 @@ class CockpitApp(App):
             dashboard.refresh_data()
         workspace = _first_mounted(self, JobsWorkspace)
         if workspace:
-            workspace.query_one(JobsTable).refresh_rows()
+            workspace.refresh_table()
             selected = workspace.selected_job
             if selected:
                 workspace.query_one(JobDetailPane).show(selected)
@@ -375,6 +396,7 @@ class CockpitApp(App):
         self.focus_chat_input()
 
     def action_retry(self) -> None:
+        from src.db.models import SOURCE_MANUAL, SOURCE_PIPELINE
         from src.tui import queries
 
         job = self._selected()
@@ -383,6 +405,9 @@ class CockpitApp(App):
             return
         if job["state"] not in FAIL_STATES:
             self.notify(f"Job is {job['state']} — retry applies to failed jobs only", severity="warning")
+            return
+        if (job["source"] or SOURCE_PIPELINE) == SOURCE_MANUAL:
+            self.notify("Manual applications are never pipeline work — no retry", severity="warning")
             return
         target = queries.requeue_job(job["id"])
         if target:
@@ -397,6 +422,16 @@ class CockpitApp(App):
             self.notify("No URL for this job", severity="warning")
             return
         webbrowser.open(job["url"])
+
+    def action_add_manual(self) -> None:
+        self.push_screen(AddJobModal())
+
+    def action_change_state(self) -> None:
+        job = self._selected()
+        if not job:
+            self.notify("Select a job in the Jobs tab first", severity="warning")
+            return
+        self.push_screen(ChangeStateModal(job))
 
     def action_open_dir(self) -> None:
         import os

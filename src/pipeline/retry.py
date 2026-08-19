@@ -1,5 +1,6 @@
 from sqlmodel import select
 from src.db.models import Job, JobState, ErrorRecord
+from src.db.store import is_manual_application
 
 RETRY_STATE_BY_AGENT = {
     "AnalystAgent": JobState.NEW,
@@ -18,7 +19,13 @@ def requeue_failed_job(session, job: Job) -> JobState:
     Resets the ErrorRecord retry_count so a DLQ'd job (retry_count >= 3) gets a
     fresh budget; the next pipeline cycle processes the job from its new state.
     Mirrors the pipeline's own retry mapping.
+
+    Refuses manual applications — they are never pipeline work, even when
+    their state looks pipeline-like.
     """
+    if is_manual_application(job):
+        raise ValueError(f"Job {job.id} is a manual application — not a pipeline job")
+
     statement = select(ErrorRecord).where(ErrorRecord.job_id == job.id)
     err = session.exec(statement).first()
 

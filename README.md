@@ -44,6 +44,8 @@ uv run flowjob tui               # launch the cockpit
 | `flowjob watch` | Run the pipeline continuously with jittered countdowns |
 | `flowjob tui` | Launch the cockpit TUI |
 | `flowjob status` | DB summary counts + last successful cycle timestamp |
+| `flowjob add` | Log a manual application (filed by hand; title/company/url/jd/notes/cv/state/date-applied, all optional except at least one identifying field) |
+| `flowjob update <id> --state X` | Flip any job's state (manual or pipeline) — e.g. `REJECTED` to track rejections |
 | `flowjob audit-bank` | Audit the master resume bullet bank |
 | `flowjob grill` | Start or resume a grilling session for a job needing evidence |
 | `flowjob logs` | Browse persisted LLM request/response logs |
@@ -53,10 +55,12 @@ uv run flowjob tui               # launch the cockpit
 `flowjob tui` is the single front door to FlowJob. Five tabs (`1`–`5` to switch):
 
 - **Dashboard** — state counts, last cycle, LLM spend, watch control row
-- **Jobs** — per-state filtered table + detail pane (JD, fit/edit scores,
-  transcript, error block); actions: approve/reject (`a`/`r`) on
-  PENDING_APPROVAL, grill (`g`) on NEEDS_EVIDENCE, retry (`t`) on failed
-  states, open URL (`o`), open resume dir (`d`)
+- **Jobs** — state- and source-filtered table (manual/pipeline/all, with a
+  `manual` badge) + detail pane (JD, notes, fit/edit scores, transcript,
+  error block); actions: log a manual application (`m`), change state (`s`),
+  approve/reject (`a`/`r`) on PENDING_APPROVAL, grill (`g`) on
+  NEEDS_EVIDENCE, retry (`t`) on failed pipeline states, open URL (`o`),
+  open resume dir (`d`)
 - **LLM Logs** — persisted interactions + spend totals
 - **Settings** — structured forms for all `flowjob.yaml` sections with
   guardrail bounds; the `llm.providers` chain is edited manually in the YAML.

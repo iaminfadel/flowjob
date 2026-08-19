@@ -12,7 +12,7 @@ import uuid
 from datetime import datetime
 
 import pytest
-from textual.widgets import DataTable, Input, TabbedContent
+from textual.widgets import DataTable, Input, Select, TabbedContent, TextArea
 
 from src.db.models import Job, JobState, LLMInteraction
 from src.db.store import get_session, init_db
@@ -28,12 +28,13 @@ def cockpit_env(tmp_path, monkeypatch):
     engine = init_db(str(db_path))
     with get_session(engine) as session:
         seed = [
-            ("NEW", "Data Engineer", "Acme"),
-            ("PENDING_APPROVAL", "ML Engineer", "Globex"),
-            ("FAILED", "SRE", "Initech"),
-            ("NEEDS_EVIDENCE", "Backend Dev", "Umbrella"),
+            ("NEW", "Data Engineer", "Acme", "pipeline"),
+            ("PENDING_APPROVAL", "ML Engineer", "Globex", "pipeline"),
+            ("FAILED", "SRE", "Initech", "pipeline"),
+            ("NEEDS_EVIDENCE", "Backend Dev", "Umbrella", "pipeline"),
+            ("APPLIED", "Manual Role", "BossCorp", "manual"),
         ]
-        for state, title, company in seed:
+        for idx, (state, title, company, source) in enumerate(seed):
             session.add(
                 Job(
                     id=str(uuid.uuid4()),
@@ -45,6 +46,8 @@ def cockpit_env(tmp_path, monkeypatch):
                     jd_text=f"{title} job description",
                     state=JobState(state),
                     fit_score=70,
+                    source=source,
+                    notes="referred by a friend" if source == "manual" else "",
                 )
             )
         session.add(
@@ -85,10 +88,18 @@ async def wait_until(pilot, cond, timeout=8.0, what="condition"):
     raise AssertionError(f"timed out waiting for {what}")
 
 
+async def wait_modal_widget(pilot, app, widget_id, what="modal widget"):
+    await wait_until(
+        pilot,
+        lambda: len(app.screen.query(f"#{widget_id}").nodes) > 0,
+        what=what,
+    )
+
+
 async def test_mount_tabs_and_jobs_table(app, cockpit_env):
     from src.tui.queries import total_jobs
 
-    assert total_jobs() == 4
+    assert total_jobs() == 5
     async with app.run_test(size=(140, 40)) as pilot:
         await pilot.pause()
         tabs = app.query_one(TabbedContent)
@@ -97,7 +108,7 @@ async def test_mount_tabs_and_jobs_table(app, cockpit_env):
         tabs.active = "jobs"
         await pilot.pause()
         table = app.query_one(DataTable)
-        assert table.row_count == 4
+        assert table.row_count == 5
 
         table.move_cursor(row=0, column=0)
         await pilot.pause()
@@ -412,3 +423,307 @@ async def test_watch_pause_blocks_worker_until_continue(app, monkeypatch):
             what="watch to stop",
         )
         assert app.pause.pending() == []
+
+async def test_source_badge_and_source_filter(app, cockpit_env):
+    from src.tui.widgets import JobsTable
+
+    async with app.run_test(size=(140, 40)) as pilot:
+        tabs = app.query_one(TabbedContent)
+        tabs.active = "jobs"
+        await pilot.pause()
+
+        table = app.query_one(JobsTable)
+        assert table.row_count == 5
+        cells = [str(table.get_cell_at((r, 4))) for r in range(table.row_count)]
+        assert "manual" in cells, f"source column must carry a manual badge, got {cells}"
+        assert "pipeline" in cells
+
+        src_filter = app.query_one("#source-filter", Select)
+        src_filter.value = "manual"
+        await pilot.pause()
+        assert table.row_count == 1
+        assert str(table.get_cell_at((0, 0))) == "Manual Role"
+
+        src_filter.value = "pipeline"
+        await pilot.pause()
+        assert table.row_count == 4
+
+        src_filter.value = "ALL"
+        await pilot.pause()
+        assert table.row_count == 5
+
+
+async def test_source_filter_combines_with_state_filter(app, cockpit_env):
+    from src.tui.widgets import JobsTable
+
+    async with app.run_test(size=(140, 40)) as pilot:
+        tabs = app.query_one(TabbedContent)
+        tabs.active = "jobs"
+        await pilot.pause()
+
+        app.query_one("#state-filter", Select).value = "APPLIED"
+        app.query_one("#source-filter", Select).value = "manual"
+        await pilot.pause()
+
+        table = app.query_one(JobsTable)
+        assert table.row_count == 1
+        assert str(table.get_cell_at((0, 0))) == "Manual Role"
+
+
+async def test_manual_job_detail_shows_notes_and_jd(app, cockpit_env):
+    from src.tui import queries
+    from src.tui.widgets import JobDetailPane, JobsTable
+
+    manual = queries.jobs(source_filter="manual")[0]
+
+    async with app.run_test(size=(140, 40)) as pilot:
+        tabs = app.query_one(TabbedContent)
+        tabs.active = "jobs"
+        await pilot.pause()
+
+        table = app.query_one(JobsTable)
+        idx = table.row_job_ids.index(manual["id"])
+        table.move_cursor(row=idx, column=0)
+        await pilot.pause()
+
+        pane = app.query_one(JobDetailPane)
+        title = str(pane.query_one("#detail-title").content)
+        assert "[manual]" in title
+        notes = pane.query_one("#detail-notes")
+        assert notes.display is True
+        assert "referred by a friend" in str(notes.content)
+        jd = str(pane.query_one("#detail-jd").content)
+        assert "Manual Role job description" in jd
+
+
+async def test_add_manual_form_saves_row(app, monkeypatch, cockpit_env, tmp_path):
+    from src.tui import queries
+    from src.tui.widgets import AddJobModal, JobsTable
+
+    notes = []
+    monkeypatch.setattr(app, "notify", lambda msg, **kw: notes.append(msg))
+
+    cv = tmp_path / "cv.pdf"
+    cv.write_bytes(b"fake-pdf")
+
+    async with app.run_test(size=(140, 40)) as pilot:
+        tabs = app.query_one(TabbedContent)
+        tabs.active = "jobs"
+        await pilot.pause()
+
+        await pilot.press("m")
+        await wait_modal_widget(pilot, app, "add-title", "add form fields")
+
+        modal = app.screen
+        assert isinstance(modal, AddJobModal)
+        modal.query_one("#add-title", Input).value = "TUI Added Job"
+        modal.query_one("#add-company", Input).value = "NewCo"
+        modal.query_one("#add-url", Input).value = "https://example.com/tui-added"
+        modal.query_one("#add-jd", TextArea).text = "pasted jd in the TUI"
+        modal.query_one("#add-notes", TextArea).text = "logged from cockpit"
+        modal.query_one("#add-cv", Input).value = str(cv)
+        await pilot.click("#add-save")
+        await pilot.pause()
+
+        assert not isinstance(app.screen, AddJobModal), "modal must close after save"
+        assert any("Logged manual application" in n for n in notes)
+
+        added = queries.jobs(source_filter="manual")
+        assert len(added) == 2
+        row = next(j for j in added if j["title"] == "TUI Added Job")
+        assert row["company"] == "NewCo"
+        assert row["jd_text"] == "pasted jd in the TUI"
+        assert row["notes"] == "logged from cockpit"
+        assert row["state"] == "APPLIED"
+        assert row["date_applied"]
+        assert row["cv_path"] and os.path.exists(row["cv_path"])
+
+        table = app.query_one(JobsTable)
+        assert any("TUI Added Job" in str(table.get_cell_at((r, 0))) for r in range(table.row_count))
+
+
+async def test_add_manual_form_requires_identifying_field(app, monkeypatch, cockpit_env):
+    from src.tui.widgets import AddJobModal
+
+    notes = []
+    monkeypatch.setattr(app, "notify", lambda msg, **kw: notes.append(msg))
+
+    async with app.run_test(size=(140, 40)) as pilot:
+        await pilot.press("m")
+        await wait_modal_widget(pilot, app, "add-title", "add form fields")
+
+        await pilot.click("#add-save")
+        await pilot.pause()
+
+        assert isinstance(app.screen, AddJobModal), "modal stays open on invalid input"
+        assert any("at least one" in n for n in notes)
+
+
+async def test_add_manual_form_bad_cv_path_notifies(app, monkeypatch, cockpit_env):
+    from src.tui.widgets import AddJobModal
+
+    notes = []
+    monkeypatch.setattr(app, "notify", lambda msg, **kw: notes.append(msg))
+
+    async with app.run_test(size=(140, 40)) as pilot:
+        await pilot.press("m")
+        await wait_modal_widget(pilot, app, "add-title", "add form fields")
+
+        modal = app.screen
+        modal.query_one("#add-title", Input).value = "Bad Cv Job"
+        modal.query_one("#add-cv", Input).value = "/nonexistent/cv.pdf"
+        await pilot.click("#add-save")
+        await pilot.pause()
+
+        assert isinstance(app.screen, AddJobModal), "modal stays open on bad cv path"
+        assert any("not found" in n for n in notes)
+
+
+async def test_change_state_modal_flips_state(app, monkeypatch, cockpit_env):
+    from src.tui import queries
+    from src.tui.widgets import ChangeStateModal, JobsTable
+
+    notes = []
+    monkeypatch.setattr(app, "notify", lambda msg, **kw: notes.append(msg))
+
+    async with app.run_test(size=(140, 40)) as pilot:
+        tabs = app.query_one(TabbedContent)
+        tabs.active = "jobs"
+        await pilot.pause()
+
+        table = app.query_one(JobsTable)
+        table.move_cursor(row=0, column=0)
+        await pilot.pause()
+        target = queries.jobs("ALL")[0]
+
+        await pilot.press("s")
+        await wait_modal_widget(pilot, app, "change-state-select", "change-state modal")
+
+        modal = app.screen
+        assert isinstance(modal, ChangeStateModal)
+        modal.query_one("#change-state-select", Select).value = "REJECTED"
+        await pilot.click("#change-save")
+        await pilot.pause()
+
+        assert not isinstance(app.screen, ChangeStateModal)
+        assert queries.job_detail(target["id"])["state"] == "REJECTED"
+        assert any("→ REJECTED" in n for n in notes)
+
+
+async def test_change_state_without_selection_warns(tmp_path, monkeypatch):
+    db_path = tmp_path / "empty.db"
+    monkeypatch.setenv("FLOWJOB_DB", str(db_path))
+    from src.db.store import init_db
+
+    init_db(str(db_path))
+    from src.tui.queries import reset_engine
+
+    reset_engine()
+
+    from src.tui.app import CockpitApp
+
+    app = CockpitApp(agents={})
+    notes = []
+    monkeypatch.setattr(app, "notify", lambda msg, **kw: notes.append(msg))
+
+    async with app.run_test(size=(140, 40)) as pilot:
+        await pilot.press("s")
+        await pilot.pause()
+        assert any("Select a job" in n for n in notes)
+
+
+def _seed_extra_job(state: str, title: str, source: str):
+    from src.tui import queries
+
+    with get_session(queries.engine()) as session:
+        session.add(
+            Job(
+                id=uuid.uuid4().hex[:12],
+                url=f"https://example.com/{source}-{title.lower().replace(' ', '-')}",
+                title=title,
+                company="ExtraCorp",
+                location="",
+                posted_date="",
+                jd_text=f"{title} job description",
+                state=JobState(state),
+                source=source,
+            )
+        )
+        session.commit()
+
+
+async def test_manual_failed_row_has_no_retry_hint(app, cockpit_env):
+    from src.tui import queries
+    from src.tui.widgets import JobsTable
+
+    _seed_extra_job("FAILED", "Manual Fail", "manual")
+
+    async with app.run_test(size=(140, 40)) as pilot:
+        tabs = app.query_one(TabbedContent)
+        tabs.active = "jobs"
+        await pilot.pause()
+
+        table = app.query_one(JobsTable)
+        idx = next(
+            i for i, jid in enumerate(table.row_job_ids)
+            if (queries.job_detail(jid) or {}).get("title") == "Manual Fail"
+        )
+        table.move_cursor(row=idx, column=0)
+        await pilot.pause()
+
+        actions = str(app.query_one("#detail-actions").content)
+        assert "[t] retry" not in actions, f"manual rows must not invite retry, got: {actions}"
+
+
+async def test_hitl_inboxes_exclude_manual_rows(app, cockpit_env):
+    from src.tui import queries
+    from src.tui.widgets import ApprovalList, NeedsEvidenceList
+    from textual.widgets import Label
+
+    _seed_extra_job("PENDING_APPROVAL", "Manual Pending", "manual")
+    _seed_extra_job("NEEDS_EVIDENCE", "Manual Evidence", "manual")
+
+    async with app.run_test(size=(140, 40)) as pilot:
+        tabs = app.query_one(TabbedContent)
+        tabs.active = "hitl"
+        await pilot.pause()
+
+        approval = app.query_one("#approval-list", ApprovalList)
+        approval_text = "\n".join(str(w.content) for w in approval.query(Label))
+        assert "ML Engineer" in approval_text
+        assert "Manual Pending" not in approval_text
+
+        evidence = app.query_one("#evidence-list", NeedsEvidenceList)
+        evidence_text = "\n".join(str(w.content) for w in evidence.query(Label))
+        assert "Backend Dev" in evidence_text
+        assert "Manual Evidence" not in evidence_text
+
+        assert queries.jobs("PENDING_APPROVAL", source_filter="manual")[0]["title"] == "Manual Pending"
+
+
+async def test_retry_action_refuses_manual_row(app, monkeypatch, cockpit_env):
+    from src.tui import queries
+    from src.tui.widgets import JobsTable
+
+    _seed_extra_job("FAILED", "Manual Fail", "manual")
+    notes = []
+    monkeypatch.setattr(app, "notify", lambda msg, **kw: notes.append(msg))
+
+    async with app.run_test(size=(140, 40)) as pilot:
+        tabs = app.query_one(TabbedContent)
+        tabs.active = "jobs"
+        await pilot.pause()
+
+        table = app.query_one(JobsTable)
+        idx = next(
+            i for i, jid in enumerate(table.row_job_ids)
+            if (queries.job_detail(jid) or {}).get("title") == "Manual Fail"
+        )
+        table.move_cursor(row=idx, column=0)
+        await pilot.pause()
+
+        await pilot.press("t")
+        await pilot.pause()
+
+        assert any("never pipeline work" in n for n in notes), notes
+        assert queries.job_detail(table.row_job_ids[idx])["state"] == "FAILED"

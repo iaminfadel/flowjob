@@ -4,6 +4,7 @@ settings forms, HITL inbox + grill chat, and the approval modal."""
 from __future__ import annotations
 
 import time
+from datetime import datetime
 from typing import Protocol, cast
 
 from rich.text import Text
@@ -24,9 +25,10 @@ from textual.widgets import (
     Rule,
     Select,
     Static,
+    TextArea,
 )
 
-from src.db.models import JobState
+from src.db.models import SOURCE_MANUAL, SOURCE_PIPELINE, JobState
 from src.tui import queries
 from src.tui.approval import ApprovalManager
 from src.tui.grill import GrillManager
@@ -178,20 +180,26 @@ class JobsTable(DataTable):
         self.add_column("Company", key="company", width=18)
         self.add_column("Location", key="location", width=15)
         self.add_column("State", key="state", width=16)
+        self.add_column("Source", key="source", width=9)
         self.add_column("Fit", key="fit", width=5)
         self.add_column("Edit", key="edit", width=5)
         self.row_job_ids: list[str] = []
 
-    def refresh_rows(self, state_filter: str = "ALL") -> None:
+    def refresh_rows(self, state_filter: str = "ALL", source_filter: str = "ALL") -> None:
+        from src.db.models import SOURCE_MANUAL
+
         self.clear()
         self.row_job_ids = []
-        for job in queries.jobs(state_filter):
+        for job in queries.jobs(state_filter, source_filter):
             self.row_job_ids.append(job["id"])
+            src = job["source"] or SOURCE_MANUAL
+            src_style = "bold yellow" if src == SOURCE_MANUAL else "dim"
             self.add_row(
                 Text(job["title"]),
                 job["company"],
                 job["location"],
                 Text(job["state"], style=state_style(job["state"])),
+                Text(src, style=src_style),
                 str(job["fit_score"] or "-"),
                 str(job["edit_score"] or "-"),
                 key=job["id"],
@@ -212,6 +220,7 @@ class JobDetailPane(VerticalScroll):
         yield Static("", id="detail-meta")
         yield Static("", id="detail-scores")
         yield Static("", id="detail-cv")
+        yield Static("", id="detail-notes", classes="jd")
         yield Static("", id="detail-errors", classes="error-block")
         yield Static("", id="detail-actions")
         yield Rule()
@@ -222,13 +231,21 @@ class JobDetailPane(VerticalScroll):
         yield Static("", id="detail-transcript", classes="jd")
 
     def show(self, job: dict) -> None:
+        from src.db.models import SOURCE_MANUAL, SOURCE_PIPELINE
+
         state = job["state"]
         style = state_style(state)
+        src = job["source"] or SOURCE_PIPELINE
+        src_style = "bold yellow" if src == SOURCE_MANUAL else "dim"
         self.query_one("#detail-title", Static).update(
-            Text(f"{job['title']} — {job['company']}", style="bold")
+            Text.assemble(
+                Text(f"[{src}] ", style=src_style),
+                Text(f"{job['title']} — {job['company']}", style="bold"),
+            )
         )
+        applied = f" · applied {job['date_applied']}" if job.get("date_applied") else ""
         self.query_one("#detail-meta", Static).update(
-            f"{job['location']} · posted {job['posted_date']} · {job['url']}"
+            f"{job['location']} · posted {job['posted_date']}{applied} · {job['url']}"
         )
         self.query_one("#detail-scores", Static).update(
             f"State: {Text(state, style=style)}   Fit: {job['fit_score'] or '-'}/100   "
@@ -238,6 +255,14 @@ class JobDetailPane(VerticalScroll):
         self.query_one("#detail-cv", Static).update(
             f"CV: {cv if cv else '(not generated yet)'}"
         )
+
+        notes_widget = self.query_one("#detail-notes", Static)
+        if job.get("notes"):
+            notes_widget.update(f"Notes: {job['notes']}")
+            notes_widget.display = True
+        else:
+            notes_widget.update("")
+            notes_widget.display = False
 
         err_widget = self.query_one("#detail-errors", Static)
         if state in FAIL_STATES:
@@ -260,9 +285,10 @@ class JobDetailPane(VerticalScroll):
             hints = ["[a] approve", "[r] reject"]
         elif state == "NEEDS_EVIDENCE":
             hints = ["[g] open grill"]
-        elif state in FAIL_STATES:
+        elif state in FAIL_STATES and src != SOURCE_MANUAL:
             hints = ["[t] retry"]
         hints.append("[o] open url")
+        hints.append("[s] change state")
         if cv:
             hints.append("[d] open resume dir")
         self.query_one("#detail-actions", Static).update("   ".join(hints))
@@ -291,11 +317,23 @@ class JobsWorkspace(Horizontal):
 
     def compose(self) -> ComposeResult:
         with Vertical(id="jobs-col"):
-            yield Select(
-                [(s, s) for s in ["ALL", *STATES]],
-                value="ALL",
-                prompt="State filter",
-                id="state-filter",
+            with Horizontal(id="jobs-filters"):
+                yield Select(
+                    [(s, s) for s in ["ALL", *STATES]],
+                    value="ALL",
+                    prompt="State filter",
+                    id="state-filter",
+                )
+                yield Select(
+                    [("ALL", "ALL"), (SOURCE_MANUAL, SOURCE_MANUAL), (SOURCE_PIPELINE, SOURCE_PIPELINE)],
+                    value="ALL",
+                    prompt="Source filter",
+                    id="source-filter",
+                )
+            yield Static(
+                "[m] log a manual application · [s] change state",
+                id="jobs-hint",
+                classes="note",
             )
             yield JobsTable(id="jobs-table")
         yield JobDetailPane(id="job-detail")
@@ -309,12 +347,16 @@ class JobsWorkspace(Horizontal):
         return queries.job_detail(job_id)
 
     def on_mount(self) -> None:
-        self.query_one(JobsTable).refresh_rows()
+        self.refresh_table()
+
+    def refresh_table(self) -> None:
+        state = str(self.query_one("#state-filter", Select).value or "ALL")
+        source = str(self.query_one("#source-filter", Select).value or "ALL")
+        self.query_one(JobsTable).refresh_rows(state, source)
 
     def on_select_changed(self, event: Select.Changed) -> None:
-        if event.select.id == "state-filter":
-            value = str(event.value) if event.value is not None else "ALL"
-            self.query_one(JobsTable).refresh_rows(value)
+        if event.select.id in ("state-filter", "source-filter"):
+            self.refresh_table()
 
     def on_data_table_row_selected(self, event: DataTable.RowSelected) -> None:
         self._show_row(event.row_key.value)
@@ -468,7 +510,7 @@ class ApprovalList(VerticalScroll):
     def refresh_data(self) -> None:
         for child in list(self.children):
             child.remove()
-        pending = queries.jobs("PENDING_APPROVAL")
+        pending = queries.jobs("PENDING_APPROVAL", source_filter=SOURCE_PIPELINE)
         if not pending:
             yield_label = Label("(none)", classes="dim-row")
             self.mount(yield_label)
@@ -503,7 +545,7 @@ class NeedsEvidenceList(VerticalScroll):
     def refresh_data(self) -> None:
         for child in list(self.children):
             child.remove()
-        jobs = queries.jobs("NEEDS_EVIDENCE")
+        jobs = queries.jobs("NEEDS_EVIDENCE", source_filter=SOURCE_PIPELINE)
         if not jobs:
             self.mount(Label("(none)", classes="dim-row"))
             return
@@ -606,7 +648,7 @@ class HitlWorkspace(Horizontal):
         self.query_one("#approval-list", ApprovalList).refresh_data()
         self.query_one("#evidence-list", NeedsEvidenceList).refresh_data()
         self.query_one("#pause-list", PauseList).refresh_data()
-        unfixable = queries.jobs("UNFIXABLE")
+        unfixable = queries.jobs("UNFIXABLE", source_filter=SOURCE_PIPELINE)
         text = "\n".join(f"{j['title']} — {j['company']}" for j in unfixable) or "(none)"
         self.query_one("#unfixable-list", Static).update(text)
 
@@ -707,3 +749,150 @@ class PauseModal(ModalScreen[None]):
 
     def action_dismiss_modal(self) -> None:
         self._continue()
+
+
+class AddJobModal(ModalScreen[None]):
+    """Log a manual application — mirror of `flowjob add` (see ticket #91)."""
+
+    BINDINGS = [
+        Binding("escape", "cancel", "Cancel"),
+    ]
+
+    def compose(self) -> ComposeResult:
+        yield Static("[bold]Log a manual application[/]", id="modal-title", classes="modal-box")
+        with VerticalScroll(id="add-form", classes="modal-box"):
+            yield Input(placeholder="Title (required-ish)", id="add-title")
+            yield Input(placeholder="Company", id="add-company")
+            yield Input(placeholder="URL", id="add-url")
+            yield Label("Job description (paste)")
+            yield TextArea("", id="add-jd")
+            yield Label("Notes")
+            yield TextArea("", id="add-notes")
+            yield Input(placeholder="CV file path (copied into the resume store)", id="add-cv")
+            yield Select(
+                [(s, s) for s in STATES],
+                value=JobState.APPLIED.value,
+                prompt="State",
+                id="add-state",
+            )
+            yield Input(
+                placeholder="Date applied (defaults to today)",
+                value=datetime.now().strftime("%Y-%m-%d"),
+                id="add-date-applied",
+            )
+            with Horizontal():
+                yield Button("Save", id="add-save", variant="primary")
+                yield Button("Cancel", id="add-cancel", variant="error")
+
+    def _collect(self) -> dict:
+        return {
+            "title": self.query_one("#add-title", Input).value.strip(),
+            "company": self.query_one("#add-company", Input).value.strip(),
+            "url": self.query_one("#add-url", Input).value.strip(),
+            "jd_text": self.query_one("#add-jd", TextArea).text,
+            "notes": self.query_one("#add-notes", TextArea).text,
+            "cv": self.query_one("#add-cv", Input).value.strip(),
+            "state": str(self.query_one("#add-state", Select).value or JobState.APPLIED.value),
+            "date_applied": self.query_one("#add-date-applied", Input).value.strip() or None,
+        }
+
+    def _save(self) -> None:
+        from src.db.models import SOURCE_MANUAL
+        from src.db.store import create_manual_job, find_jobs_by_url
+
+        fields = self._collect()
+        try:
+            job_id, _, saved = create_manual_job(
+                queries.engine(),
+                title=fields["title"],
+                company=fields["company"],
+                url=fields["url"],
+                jd_text=fields["jd_text"],
+                notes=fields["notes"],
+                cv=fields["cv"],
+                state=JobState(fields["state"]),
+                date_applied=fields["date_applied"],
+            )
+        except ValueError as exc:
+            self.app.notify(str(exc), severity="error")
+            return
+
+        if not saved:
+            self.app.notify(f"A job with id {job_id} already exists — nothing saved", severity="error")
+            return
+
+        if fields["url"]:
+            existing = find_jobs_by_url(queries.engine(), fields["url"])
+            if existing:
+                ids = ", ".join(j.id for j in existing)
+                self.app.notify(
+                    f"A job with this URL already exists ({ids}) — separate row created",
+                    severity="warning",
+                )
+
+        self.app.notify(f"Logged manual application [{job_id}] ({SOURCE_MANUAL})")
+        as_cockpit(self.app).refresh_all()
+        self.dismiss(None)
+
+    def on_button_pressed(self, event: Button.Pressed) -> None:
+        if event.button.id == "add-save":
+            self._save()
+        elif event.button.id == "add-cancel":
+            self.dismiss(None)
+
+    def action_cancel(self) -> None:
+        self.dismiss(None)
+
+
+class ChangeStateModal(ModalScreen[None]):
+    """Flip any job's state — mirror of `flowjob update <id> --state X`."""
+
+    BINDINGS = [
+        Binding("escape", "cancel", "Cancel"),
+    ]
+
+    def __init__(self, job: dict, **kwargs) -> None:
+        super().__init__(**kwargs)
+        self.job = job
+
+    def compose(self) -> ComposeResult:
+        job = self.job
+        yield Static(
+            f"[bold]Change state — {job['title']} — {job['company']}[/]",
+            id="modal-title",
+            classes="modal-box",
+        )
+        yield Static(
+            f"Current state: {job['state']} (source: {job['source'] or 'pipeline'})",
+            id="modal-body",
+            classes="modal-box",
+        )
+        with VerticalScroll(id="add-form", classes="modal-box"):
+            yield Select(
+                [(s, s) for s in STATES],
+                value=job["state"],
+                prompt="New state",
+                id="change-state-select",
+            )
+            with Horizontal():
+                yield Button("Save", id="change-save", variant="primary")
+                yield Button("Cancel", id="change-cancel", variant="error")
+
+    def _save(self) -> None:
+        value = str(self.query_one("#change-state-select", Select).value)
+        new_state = queries.set_job_state(self.job["id"], value)
+        if new_state is None:
+            self.app.notify(f"No job with id {self.job['id']}", severity="error")
+            return
+        self.app.notify(f"{self.job['title']}: {self.job['state']} → {new_state}")
+        as_cockpit(self.app).refresh_all()
+        self.dismiss(None)
+
+    def on_button_pressed(self, event: Button.Pressed) -> None:
+        if event.button.id == "change-save":
+            self._save()
+        elif event.button.id == "change-cancel":
+            self.dismiss(None)
+
+    def action_cancel(self) -> None:
+        self.dismiss(None)
