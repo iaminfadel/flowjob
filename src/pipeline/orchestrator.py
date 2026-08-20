@@ -151,8 +151,10 @@ def process_scout(session: Session, config: dict, url: Optional[str] = None) -> 
             queries = [{"role": "software engineer", "location": "Worldwide", "wt": None}]
 
         for q in queries:
-            search_url = f"https://www.linkedin.com/jobs/search/?keywords={urllib.parse.quote(q[\"role\"])}"
-            search_url += f"&location={urllib.parse.quote(q[\"location\"])}"
+            q_role = q["role"]
+            q_location = q["location"]
+            search_url = f"https://www.linkedin.com/jobs/search/?keywords={urllib.parse.quote(q_role)}"
+            search_url += f"&location={urllib.parse.quote(q_location)}"
             if q["wt"]:
                 wt_lower = q["wt"].lower()
                 if "remote" in wt_lower:
