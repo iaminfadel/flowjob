@@ -38,18 +38,19 @@ def scrape_linkedin_jobs(search_url: str, max_jobs: int = 30, headless: bool = F
         except PlaywrightTimeout:
             pass
         
-        # Active polling: scroll and wait for job links to appear.
-        # LinkedIn's "AI-powered job search" loads results lazily via JS,
-        # so we need to give it time and scroll to trigger rendering.
-        print("Waiting for job results to render...")
+        # Collect job URLs by scrolling through search results
+        print(f"Collecting job URLs (up to {max_jobs})...")
         job_urls = []
-        max_attempts = 6
-        for attempt in range(max_attempts):
-            time.sleep(3)
-            
-            # Try multiple selectors for job links
+        no_new_jobs_count = 0
+        max_scroll_cycles = 30
+        
+        # Initial settle
+        time.sleep(2)
+        
+        for cycle in range(max_scroll_cycles):
+            # 1. Query all job view links in current DOM
             elements = page.locator("a[href*='/jobs/view/']").all()
-            
+            new_found = 0
             for el in elements:
                 try:
                     href = el.evaluate("el => el.href")
@@ -57,17 +58,60 @@ def scrape_linkedin_jobs(search_url: str, max_jobs: int = 30, headless: bool = F
                         clean = clean_url(href)
                         if clean not in job_urls:
                             job_urls.append(clean)
+                            new_found += 1
                 except Exception:
                     pass
             
-            if job_urls:
-                print(f"Attempt {attempt+1}: Found {len(job_urls)} job URLs so far.")
+            if new_found > 0:
+                no_new_jobs_count = 0
+                print(f"Found {len(job_urls)} unique job URLs so far (added +{new_found})...")
+            else:
+                no_new_jobs_count += 1
+            
+            if len(job_urls) >= max_jobs:
+                break
+                
+            # If no new jobs found after multiple scrolls, attempt pagination
+            if no_new_jobs_count >= 3:
+                if len(job_urls) < max_jobs:
+                    next_button = page.locator(
+                        "button[aria-label='Next'], button[aria-label*='next page' i], button.artdeco-pagination__button--next, [data-test-pagination-page-btn].active + li button"
+                    ).first
+                    try:
+                        if next_button.is_visible() and next_button.is_enabled():
+                            print("Reached end of current page, clicking Next page...")
+                            next_button.click()
+                            time.sleep(2.5)
+                            no_new_jobs_count = 0
+                            continue
+                    except Exception:
+                        pass
+                # No more jobs or pagination available
                 break
             
-            # Scroll down to trigger lazy loading
-            print(f"Attempt {attempt+1}: No jobs yet, scrolling to trigger load...")
-            page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
-            page.evaluate("window.scrollTo(0, 0)")
+            # Scroll both list containers and window to trigger lazy rendering
+            page.evaluate("""(() => {
+                const selectors = [
+                    '.jobs-search-results-list',
+                    '.scaffold-layout__list',
+                    'div.jobs-search-results-list',
+                    'div[data-view-name="job-search-results-list"]',
+                    'ul.jobs-search__results-list',
+                    '.jobs-search__left-rail',
+                    'div.jobs-search-two-pane__wrapper'
+                ];
+                let scrolled = false;
+                for (const sel of selectors) {
+                    const el = document.querySelector(sel);
+                    if (el && (el.scrollHeight > el.clientHeight)) {
+                        el.scrollBy(0, 600);
+                        scrolled = true;
+                    }
+                }
+                window.scrollBy(0, 600);
+                return scrolled;
+            })()""")
+            time.sleep(1.5)
                     
         print(f"Found {len(job_urls)} unique job URLs. Will scrape up to {max_jobs}.")
         
@@ -82,16 +126,14 @@ def scrape_linkedin_jobs(search_url: str, max_jobs: int = 30, headless: bool = F
             try:
                 print(f"Navigating to job: {url}")
                 try:
-                    page.goto(url, wait_until="domcontentloaded", timeout=60000)
+                    # Use 'commit' for HTTP (avoids long-poll hang) and 'domcontentloaded' for file:// URLs
+                    wait_mode = "domcontentloaded" if url.startswith("file://") else "commit"
+                    page.goto(url, wait_until=wait_mode, timeout=30000)
                 except PlaywrightTimeout:
-                    print("⚠️ Job detail navigation timed out waiting for full load, proceeding with DOM...")
-                
-                # Wait for page to fully load instead of waiting for a specific element
-                try:
-                    page.wait_for_load_state("networkidle", timeout=10000)
-                except PlaywrightTimeout:
-                    pass
-                time.sleep(2)
+                    print("⚠️ Job detail navigation timed out, proceeding with DOM...")
+
+                # Give the already-rendered page a moment to settle its JS
+                time.sleep(1.5 if url.startswith("file://") else 3)
                 
                 # Extract Title & Company — page.title() is the most reliable (e.g. "R&D Engineer | Company | LinkedIn")
                 title = "Unknown Title"
@@ -139,21 +181,72 @@ def scrape_linkedin_jobs(search_url: str, max_jobs: int = 30, headless: bool = F
                     except Exception:
                         continue
                 
-                # Extract JD Text — try multiple containers
+                # ── JD Extraction ─────────────────────────────────────────────
+                # LinkedIn lazy-renders #job-details only after the element is
+                # scrolled into view. Scroll down first to trigger it, then try
+                # the specific container; fall back to main (always populated).
+                try:
+                    page.evaluate("window.scrollBy(0, 600)")
+                    time.sleep(1)
+                except Exception:
+                    pass
+
                 jd_text = ""
-                for jd_selector in ["#job-details", "article", ".jobs-description__container", ".description__text"]:
-                    jd_elem = page.locator(jd_selector).first
+
+                # Try #job-details via page.evaluate — instant null if absent,
+                # no wait_for_selector timeout (the earlier hang source).
+                for jd_selector in ["#job-details", ".jobs-description__content", "article"]:
                     try:
-                        if jd_elem.is_visible():
-                            jd_text = jd_elem.inner_text().strip()
-                            if jd_text:
-                                break
+                        raw = page.evaluate(
+                            f"""(() => {{
+                                const el = document.querySelector({repr(jd_selector)});
+                                return el ? el.innerText : null;
+                            }})()"""
+                        )
+                        if raw and len(raw.strip()) > 20:
+                            jd_text = raw.strip()
+                            break
                     except Exception:
                         continue
-                
-                # Last resort for JD: grab all visible text from the page body
+
+                # main is always populated on LinkedIn job pages
                 if not jd_text:
-                    jd_text = page.locator("main").first.inner_text().strip() if page.locator("main").count() > 0 else ""
+                    try:
+                        jd_text = page.locator("main").first.inner_text().strip()
+                    except Exception:
+                        jd_text = ""
+
+                # ── Post-extraction cleaning ──────────────────────────────────
+                # LinkedIn pages include a lot of UI chrome (Premium upsells,
+                # applicant counts, navigation) before and after the real JD.
+                # Slice from "About the job" heading if present.
+                if jd_text:
+                    lower = jd_text.lower()
+                    about_idx = lower.find("about the job")
+                    if about_idx != -1:
+                        # Keep everything from "About the job" onward
+                        jd_text = jd_text[about_idx + len("about the job"):].lstrip("\n ").strip()
+
+                    # Truncate at known LinkedIn UI noise that follows the JD.
+                    # Guard: only truncate if marker appears after the first 300 chars
+                    # so phrases like "Show more" embedded in the real JD body are kept.
+                    _noise_markers = [
+                        "Similar jobs",
+                        "People also viewed",
+                        "You may also know",
+                        "Get AI-powered advice",
+                        "Try Premium",
+                        "See who LinkedIn",
+                        "People you can reach",
+                        "Meet the hiring team",
+                        "Show more",
+                        "Show less",
+                    ]
+                    for marker in _noise_markers:
+                        idx = jd_text.find(marker)
+                        if idx != -1 and idx > 300:
+                            jd_text = jd_text[:idx].strip()
+                            break
                 
                 if not jd_text:
                     print(f"Skipping {title} at {company}: Could not find job description text.")

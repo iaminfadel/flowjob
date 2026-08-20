@@ -1,5 +1,5 @@
 scout:
-  max_scrape_per_run: 2
+  max_scrape_per_run: 30
   time_filter: "past_24_hours"
 analyst:
   model: "gemini-3.1-flash-lite"
@@ -79,5 +79,5 @@ data:
   output_dir: "output/"
   browser_data_dir: "browser_data/"
 watch:
-  min_wait_minutes: 5
-  max_wait_minutes: 7
+  min_wait_minutes: 1
+  max_wait_minutes: 2
