@@ -1,6 +1,12 @@
-import os
+"""Cross-platform exclusive watch-loop lock.
+
+Uses fcntl on POSIX and msvcrt on Windows to prevent two watch loops
+(CLI or TUI) from running concurrently in the same project directory.
+"""
+
 import contextlib
-import fcntl
+import os
+import sys
 
 
 class WatchLockHeldError(RuntimeError):
@@ -11,16 +17,46 @@ class WatchLockHeldError(RuntimeError):
 def acquire_watch_lock(lock_path: str = ".flowjob-watch.lock"):
     """Exclusively claim the watch lock; fails fast if another watcher holds it.
 
-    The lock is released automatically if the owning process dies.
+    The lock is released automatically when the context exits or if the
+    owning process dies.
     """
     fd = os.open(lock_path, os.O_CREAT | os.O_RDWR, 0o644)
+    _closed = False
     try:
-        try:
-            fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
-        except OSError:
-            raise WatchLockHeldError(
-                f"Watch lock held at {lock_path} — another watcher (CLI or TUI) is running."
-            ) from None
-        yield fd
+        if sys.platform == "win32":
+            import msvcrt
+
+            try:
+                msvcrt.locking(fd, msvcrt.LK_NBLCK, 1)
+            except OSError:
+                os.close(fd)
+                _closed = True
+                raise WatchLockHeldError(
+                    f"Watch lock held at {lock_path} — another watcher (CLI or TUI) is running."
+                ) from None
+            try:
+                yield fd
+            finally:
+                try:
+                    os.lseek(fd, 0, os.SEEK_SET)
+                    msvcrt.locking(fd, msvcrt.LK_UNLCK, 1)
+                except OSError:
+                    pass
+        else:
+            import fcntl
+
+            try:
+                fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            except OSError:
+                os.close(fd)
+                _closed = True
+                raise WatchLockHeldError(
+                    f"Watch lock held at {lock_path} — another watcher (CLI or TUI) is running."
+                ) from None
+            yield fd
     finally:
-        os.close(fd)
+        if not _closed:
+            try:
+                os.close(fd)
+            except OSError:
+                pass

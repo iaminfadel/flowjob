@@ -123,9 +123,15 @@ class DashboardPane(Vertical):
         self.query_one("#dash-counts", Static).update(cards)
 
     def set_watch_status(self, state: str, detail: str = "") -> None:
-        self.query_one("#watch-status", Static).update(
-            f"Watch: {state}" + (f" ({detail})" if detail else "")
-        )
+        _state_markup = {
+            "running": "[bold green]running[/]",
+            "countdown": "[bold yellow]countdown[/]",
+            "error": "[bold red]error[/]",
+            "idle": "[dim]idle[/]",
+        }
+        label = _state_markup.get(state, state)
+        suffix = f" [dim]({detail})[/]" if detail else ""
+        self.query_one("#watch-status", Static).update(f"Watch: {label}{suffix}")
         if self._countdown_timer is not None:
             self._countdown_timer.stop()
             self._countdown_timer = None

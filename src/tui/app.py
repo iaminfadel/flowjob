@@ -315,7 +315,7 @@ class CockpitApp(App):
     def on_watch_state_changed(self, message: WatchStateChanged) -> None:
         self.query_one(DashboardPane).set_watch_status(message.state, message.detail)
         if message.state == "error":
-            self.notify(f"Watch error: {message.detail}", severity="error")
+            self.notify(f"Watch error: {message.detail}", severity="error", timeout=30)
         self.refresh_all()
 
     def on_cycle_summary(self, message: CycleSummary) -> None:
