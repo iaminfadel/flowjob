@@ -96,10 +96,9 @@ def run(url: str = typer.Option(None, help="Process a single job URL instead of 
 @app.command()
 def watch():
     """Run the FlowJob pipeline continuously with jitter."""
-    import time
-    import random
     from src.config import load_config
     from src.pipeline.orchestrator import run_pipeline
+    from src.pipeline.watch_loop import run_watch_loop
     from src.pipeline.watch_lock import acquire_watch_lock, WatchLockHeldError
     from src.db.store import init_db
 
@@ -110,14 +109,13 @@ def watch():
     agents = build_agents()
     try:
         with acquire_watch_lock():
-            while True:
+            def cycle():
                 typer.echo("🚀 Running pipeline cycle...")
-                
-                run_pipeline(agents=agents)
-                
-                jitter_minutes = random.uniform(cfg.watch.min_wait_minutes, cfg.watch.max_wait_minutes)
-                typer.echo(f"⏳ Sleeping for {jitter_minutes:.2f} minutes before next cycle...")
-                time.sleep(jitter_minutes * 60)
+                summary = run_pipeline(agents=agents)
+                typer.echo(f"✅ Cycle done in {summary.duration_s:.1f}s (applied: {summary.jobs_applied}, failed: {summary.jobs_failed}).")
+                return summary
+
+            run_watch_loop(cfg, cycle)
     except WatchLockHeldError as e:
         typer.echo(f"❌ {e}")
         raise typer.Exit(code=1)
