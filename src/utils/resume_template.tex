@@ -1,0 +1,233 @@
+%-------------------------
+% Resume in Latex
+% Based on Jake's Resume template (MIT License)
+% FlowJob pipeline rendering — adapted from the EgSA internship CV.
+% Jinja2 custom delimiters are used for statements and expressions
+% (configured in document_generator.py) so LaTeX braces never collide.
+%-------------------------
+
+\documentclass[a4paper,10pt]{article}
+
+\usepackage{latexsym}
+\usepackage[empty]{fullpage}
+\usepackage{titlesec}
+\usepackage{marvosym}
+\usepackage[usenames,dvipsnames]{color}
+\usepackage{verbatim}
+\usepackage{enumitem}
+\usepackage[hidelinks]{hyperref}
+\usepackage{fancyhdr}
+\usepackage[english]{babel}
+\usepackage{tabularx}
+\usepackage{amssymb}
+\usepackage{fontawesome5}
+\input{glyphtounicode}
+
+\pagestyle{fancy}
+\fancyhf{} % clear all header and footer fields
+\fancyfoot{}
+\renewcommand{\headrulewidth}{0pt}
+\renewcommand{\footrulewidth}{0pt}
+
+% Adjust margins
+\addtolength{\oddsidemargin}{-0.55in}
+\addtolength{\evensidemargin}{-0.55in}
+\addtolength{\textwidth}{1.1in}
+\addtolength{\topmargin}{-.65in}
+\addtolength{\textheight}{1.3in}
+
+\urlstyle{same}
+
+\linespread{1.1}
+
+\raggedbottom
+\raggedright
+\setlength{\tabcolsep}{0in}
+
+% Sections formatting
+\titleformat{\section}{
+  \vspace{-2pt}\scshape\raggedright\large
+}{}{0em}{}[\color{black}\titlerule \vspace{-4pt}]
+
+% Ensure that generated pdf is machine readable/ATS parsable
+\pdfgentounicode=1
+
+%-------------------------
+% Custom commands
+\newcommand{\resumeItem}[1]{
+  \item\small{
+    {#1 \vspace{-3pt}}
+  }
+}
+
+\newcommand{\resumeSubheading}[4]{
+  \vspace{-1pt}\item
+    \begin{tabular*}{0.97\textwidth}[t]{l@{\extracolsep{\fill}}r}
+      \textbf{#1} & #2 \\
+      \textit{\small#3} & \textit{\small #4} \\
+    \end{tabular*}\vspace{-5pt}
+}
+
+\newcommand{\resumeSubSubheading}[2]{
+    \item
+    \begin{tabular*}{0.97\textwidth}{l@{\extracolsep{\fill}}r}
+      \textit{\small#1} & \textit{\small #2} \\
+    \end{tabular*}\vspace{-5pt}
+}
+
+\newcommand{\resumeProjectHeading}[2]{
+    \item
+    \begin{tabular*}{0.97\textwidth}{l@{\extracolsep{\fill}}r}
+      \small#1 & #2 \\
+    \end{tabular*}\vspace{-3pt}
+}
+
+\newcommand{\resumeSubItem}[1]{\resumeItem{#1}\vspace{-3pt}}
+
+\renewcommand\labelitemii{$\vcenter{\hbox{\tiny$\bullet$}}$}
+
+\newcommand{\resumeSubHeadingListStart}{\begin{itemize}[leftmargin=0.15in, label={}]}
+\newcommand{\resumeSubHeadingListEnd}{\end{itemize}\vspace{-2pt}}
+\newcommand{\resumeItemListStart}{\begin{itemize}}
+\newcommand{\resumeItemListEnd}{\end{itemize}\vspace{-2pt}}
+
+%-------------------------------------------
+%%%%%%  RESUME STARTS HERE  %%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\begin{document}
+
+%----------HEADING----------
+\begin{center}
+    \textbf{\LARGE \scshape \VAR{header.name} } \\ \vspace{1pt}
+    \small
+    \href{mailto:\VAR{header.email_url}}{Email}
+    \BLOCK{if header.phone}
+    $|$ \VAR{header.phone}
+    \BLOCK{endif}
+    \BLOCK{for link in header.links}
+    \BLOCK{if link.url}
+    $|$ \href{\VAR{link.url}}{\VAR{link.label}}
+    \BLOCK{endif}
+    \BLOCK{endfor}
+    \BLOCK{if header.nationality}
+    $|$ \VAR{header.nationality} National
+    \BLOCK{endif}
+    \BLOCK{if header.military_service}
+    $|$ Military Service: \VAR{header.military_service}
+    \BLOCK{endif}
+    \BLOCK{if header.availability}
+    $|$ \VAR{header.availability}
+    \BLOCK{endif}
+\end{center}
+
+%-----------PROFILE-----------
+\BLOCK{if summary}
+\section{Profile}
+ \begin{itemize}[leftmargin=0.15in, label={}]
+    \small{\item{
+     \VAR{summary}
+    }}
+ \end{itemize}
+\BLOCK{endif}
+
+%-----------EDUCATION-----------
+\BLOCK{if education}
+\section{Education}
+  \resumeSubHeadingListStart
+  \BLOCK{for edu in education}
+    \resumeSubheading
+      {\VAR{edu.institution}}{\VAR{edu.location}}
+      {\VAR{edu.degree}}{\VAR{edu.date_range}}
+      \BLOCK{if edu.gpa}
+      \vspace{+1pt}
+      \begin{tabular*}{0.97\textwidth}{l}
+        \textbf{\small \VAR{edu.gpa}}
+      \end{tabular*}\vspace{-5pt}
+      \BLOCK{endif}
+  \BLOCK{endfor}
+  \resumeSubHeadingListEnd
+\BLOCK{endif}
+
+%-----------GRADUATION PROJECT-----------
+\BLOCK{if graduation_project and graduation_project.title}
+\section{Graduation Project}
+    \resumeSubHeadingListStart
+      \resumeProjectHeading
+        {\textbf{\BLOCK{if graduation_project.url}\href{\VAR{graduation_project.url}}{\VAR{graduation_project.title}}\BLOCK{else}\VAR{graduation_project.title}\BLOCK{endif}}}{\VAR{graduation_project.date_range}}
+        \BLOCK{if graduation_project.highlights}
+        \resumeItemListStart
+        \BLOCK{for item in graduation_project.highlights}
+          \resumeItem{\VAR{item}}
+        \BLOCK{endfor}
+        \resumeItemListEnd
+        \BLOCK{endif}
+    \resumeSubHeadingListEnd
+\BLOCK{endif}
+
+%-----------EXPERIENCE-----------
+\BLOCK{if work}
+\section{Experience}
+  \resumeSubHeadingListStart
+  \BLOCK{for job in work}
+    \resumeSubheading
+      {\VAR{job.position}}{\VAR{job.date_range}}
+      {\VAR{job.name}}{\VAR{job.location}}
+      \BLOCK{if job.highlights}
+      \resumeItemListStart
+      \BLOCK{for hl in job.highlights}
+        \resumeItem{\VAR{hl}}
+      \BLOCK{endfor}
+      \resumeItemListEnd
+      \BLOCK{endif}
+  \BLOCK{endfor}
+  \resumeSubHeadingListEnd
+\BLOCK{endif}
+
+%-----------SELECTED PROJECTS-----------
+\BLOCK{if projects}
+\section{Selected Projects}
+    \resumeSubHeadingListStart
+    \BLOCK{for proj in projects}
+      \resumeProjectHeading
+        {\textbf{\BLOCK{if proj.url}\href{\VAR{proj.url}}{\VAR{proj.name}}\BLOCK{else}\VAR{proj.name}\BLOCK{endif}}\BLOCK{if proj.technologies} $|$ \emph{\VAR{proj.technologies}}\BLOCK{endif}}{\VAR{proj.date_range}}
+        \BLOCK{if proj.highlights}
+        \resumeItemListStart
+        \BLOCK{for hl in proj.highlights}
+          \resumeItem{\VAR{hl}}
+        \BLOCK{endfor}
+        \resumeItemListEnd
+        \BLOCK{endif}
+    \BLOCK{endfor}
+    \resumeSubHeadingListEnd
+\BLOCK{endif}
+
+%-----------CERTIFICATES & AWARDS-----------
+\BLOCK{if certificates}
+\section{Certificates \& Awards}
+ \begin{itemize}[leftmargin=0.15in, label={}]
+    \small{\item{
+    \BLOCK{for cert in certificates}
+     \textbf{\VAR{cert.year}} -- \VAR{cert.title}\BLOCK{if not loop.last} \\ \BLOCK{endif}
+    \BLOCK{endfor}
+    }}
+ \end{itemize}
+\BLOCK{endif}
+
+%-----------TECHNICAL SKILLS-----------
+\BLOCK{if skill_groups}
+\section{Technical Skills}
+ \begin{itemize}[leftmargin=0.15in, label={}]
+    \small{\item{
+    \BLOCK{for group in skill_groups}
+     \textbf{\VAR{group.name}}{: \VAR{group.keywords}}\BLOCK{if not loop.last} \\ \BLOCK{endif}
+    \BLOCK{endfor}
+    \BLOCK{if languages_line}
+     \\
+     \textbf{Languages}{: \VAR{languages_line}}
+    \BLOCK{endif}
+    }}
+ \end{itemize}
+\BLOCK{endif}
+
+%-------------------------------------------
+\end{document}

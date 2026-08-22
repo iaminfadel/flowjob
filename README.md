@@ -18,6 +18,8 @@ LinkedIn Easy Apply — all from one SQLite database and one config file.
 ## Requirements
 
 - Python >= 3.12
+- TeX Live with `pdflatex` (resume PDFs compile through the Jake's Resume
+  LaTeX template)
 - Playwright + Chromium (`uv run playwright install chromium`)
 - LinkedIn session: run `flowjob login` once (headed browser, saves auth state)
 - An LLM provider reachable via the provider chain in `flowjob.yaml`
@@ -60,7 +62,7 @@ uv run flowjob tui               # launch the cockpit
   error block); actions: log a manual application (`m`), change state (`s`),
   approve/reject (`a`/`r`) on PENDING_APPROVAL, grill (`g`) on
   NEEDS_EVIDENCE, retry (`t`) on failed pipeline states, open URL (`o`),
-  open resume dir (`d`)
+  open resume (`d`) — all also clickable as buttons in the jobs pane
 - **LLM Logs** — persisted interactions + spend totals
 - **Settings** — structured forms for all `flowjob.yaml` sections with
   guardrail bounds; the `llm.providers` chain is edited manually in the YAML.

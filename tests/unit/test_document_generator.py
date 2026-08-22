@@ -22,8 +22,8 @@ def test_html_rendering_only(tmp_path):
     
     output_dir = str(tmp_path)
     
-    with patch("src.utils.document_generator.sync_playwright") as mock_playwright:
-        with patch("src.utils.document_generator.fitz.open") as mock_fitz:
+    with patch("playwright.sync_api.sync_playwright") as mock_playwright:
+        with patch("fitz.open") as mock_fitz:
             # Mock fitz so it passes ATS check
             mock_doc = MagicMock()
             mock_page = MagicMock()

@@ -69,11 +69,10 @@ def execute_edit(edit: EditResumeTool, draft_data: dict, master_resume_path: str
                 elif edit.op == "remove" and len(highlights) > 0:
                     highlights.pop()
                 return draft_data, f"Draft work[{idx}] highlights updated ({edit.op})."
-            elif edit.op == "add":
-                work.append({"company": "Experience", "position": "Role", "highlights": [edit.content]})
-                return draft_data, "New work entry added."
             else:
-                return draft_data, f"Work index {idx} out of range."
+                # Never fabricate stub entries (e.g. {"company": "Experience",
+                # "position": "Role"}): edits only mutate existing entries.
+                return draft_data, "Rejected: work entries cannot be created, only edited (stub guard). Put the gap in `remaining`."
 
         elif edit.section == "projects":
             projects = draft_data.setdefault("projects", [])
@@ -81,12 +80,21 @@ def execute_edit(edit: EditResumeTool, draft_data: dict, master_resume_path: str
                 if edit.index is not None and 0 <= edit.index < len(projects):
                     projects[edit.index].setdefault("highlights", []).append(edit.content)
                 else:
-                    projects.append({"name": edit.content, "highlights": []})
+                    # Never fabricate stub entries: only append to an existing project.
+                    return draft_data, "Rejected project add without index (stub guard)."
             elif edit.op == "remove" and edit.index is not None and 0 <= edit.index < len(projects):
                 projects.pop(edit.index)
             elif edit.op == "replace" and edit.index is not None and 0 <= edit.index < len(projects):
                 projects[edit.index]["name"] = edit.content
             return draft_data, f"Draft projects updated ({edit.op})."
+
+        elif edit.section == "certificates":
+            certificates = draft_data.setdefault("certificates", [])
+            if edit.op == "add" and edit.content:
+                certificates.append({"year": edit.tag or "", "title": edit.content})
+            elif edit.op == "remove" and edit.index is not None and 0 <= edit.index < len(certificates):
+                certificates.pop(edit.index)
+            return draft_data, f"Draft certificates updated ({edit.op})."
 
         return draft_data, f"Applied {edit.op} on draft section {edit.section}."
 
@@ -97,6 +105,18 @@ def execute_edit(edit: EditResumeTool, draft_data: dict, master_resume_path: str
 
 WRITER_SYSTEM_PROMPT = """You are an expert resume writer agent for FlowJob.
 Your task is to improve the draft resume to address gaps identified in the coverage report using bullets from the master bank.
+
+House style (NON-NEGOTIABLE):
+- Bullets start with a strong past-tense action verb (Built, Designed, Developed, Led, Automated, Implemented, Directed, Owned). Present tense only for ongoing roles.
+- Weave in hard metrics where the evidence supports them (%, counts, time reductions, team sizes, placements). Do not invent numbers.
+- Each bullet: 1–2 lines (~120–220 characters), one idea, no first person, no leading articles, no filler adverbs. Near-zero verb repetition across the resume.
+- Strip [bracket] tags from bank bullets — internal metadata, never include them.
+- Only use facts from the master bank or provided grilled evidence. NEVER invent employers, titles, dates, skills, or metrics.
+
+Edit rules:
+- EditResumeTool mutates EXISTING draft entries only (pass a valid index). Creating new work/project entries is rejected — if a gap needs an entry that does not exist, leave it in `remaining`.
+- For skills gaps, add keywords to the most relevant existing skill group rather than spawning new groups.
+- For summary/profile gaps, replace the whole summary with a 3–4 sentence tailored paragraph: degree/honors + GPA, top JD-relevant proof points, availability.
 
 Available tools:
 - EditResumeTool: Make concrete edits to draft resume (e.g. adding tailored bullet points to work highlights).

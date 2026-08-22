@@ -278,7 +278,7 @@ def process_evidence_loop(
         return
 
     print(f"Found {len(drafted_jobs)} DRAFTED jobs in evidence loop.")
-    from src.utils.document_generator import PlaywrightDocumentGenerator
+    from src.utils.document_generator import LatexDocumentGenerator
     from src.agents.grilling_session import GrillingSession
 
     master_metadata = None
@@ -368,7 +368,7 @@ def process_evidence_loop(
                     print(f"Job {j.id} evidence loop converged!")
                     break
 
-            generator = doc_generator if doc_generator is not None else PlaywrightDocumentGenerator()
+            generator = doc_generator if doc_generator is not None else LatexDocumentGenerator()
             pdf_path = generator.generate(draft_data, master_metadata, output_dir)
             j.cv_path = pdf_path
             print(f"Generated PDF for converged draft: {pdf_path}")
@@ -382,7 +382,7 @@ def process_drafted_jobs(session: Session, editor_agent: Any, doc_generator: Opt
     drafted_jobs = session.exec(statement).all()
     print(f"Found {len(drafted_jobs)} DRAFTED jobs.")
 
-    from src.utils.document_generator import PlaywrightDocumentGenerator
+    from src.utils.document_generator import LatexDocumentGenerator
 
     for job in drafted_jobs:
         print(f"Editing resume for job: {job.title} at {job.company}")
@@ -401,7 +401,7 @@ def process_drafted_jobs(session: Session, editor_agent: Any, doc_generator: Opt
                     master_metadata, _ = parse_master_resume("master_resume.md")
                 except Exception:
                     master_metadata = None
-                generator = doc_generator if doc_generator is not None else PlaywrightDocumentGenerator()
+                generator = doc_generator if doc_generator is not None else LatexDocumentGenerator()
                 pdf_path = generator.generate(draft_data, master_metadata, output_dir)
                 j.cv_path = pdf_path
 

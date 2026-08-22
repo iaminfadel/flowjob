@@ -1,19 +1,41 @@
+from typing import Optional
+
 import yaml
 from pathlib import Path
-from pydantic import BaseModel, ValidationError
+from pydantic import BaseModel, Field, ValidationError
+
+class GraduationProjectMeta(BaseModel):
+    title: str = ""
+    url: str = ""
+    date_range: str = ""
+    highlights: list[str] = Field(default_factory=list)
+
+class CertificateMeta(BaseModel):
+    year: str = ""
+    title: str = ""
 
 class ResumeMetadata(BaseModel):
     schema_version: str = "1"
     name: str
-    title: str
+    full_name: str = ""
+    title: str = ""
     email: str
     phone: str
     location: str
-    links: list[dict]
-    skills: dict[str, list[str]]
-    preferences: dict
-    personal_nudge: dict
-    education: list[dict]
+    links: list[dict] = Field(default_factory=list)
+    skills: dict[str, list[str]] = Field(default_factory=dict)
+    preferences: dict = Field(default_factory=dict)
+    personal_nudge: dict = Field(default_factory=dict)
+    education: list[dict] = Field(default_factory=list)
+    # Gold-standard header/section extras (injected locally at render time,
+    # never sent to LLMs — PII boundary).
+    nationality: str = ""
+    military_service: str = ""
+    availability: str = ""
+    languages_spoken: list[str] = Field(default_factory=list)
+    certificates_awards: list[CertificateMeta] = Field(default_factory=list)
+    graduation_project: Optional[GraduationProjectMeta] = None
+    profile_base: str = ""
 
 def parse_master_resume(path: str = "master_resume.md") -> tuple[ResumeMetadata, str]:
     """Parse the hybrid YAML/Markdown master resume."""

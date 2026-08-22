@@ -119,37 +119,11 @@ class DiskDocumentStore(DocumentStore):
         else:
             self.save_draft(job_id, draft_data)
 
-        # 1. Render HTML using Jinja2
-        env = Environment(loader=FileSystemLoader(self.template_dir))
-        template = env.get_template("resume_template.html")
-        html_content = template.render(**draft_data)
+        # Render .tex via the LaTeX pipeline and compile with pdflatex.
+        from src.utils.document_generator import LatexDocumentGenerator
 
-        html_path = self._html_path(job_id)
-        with open(html_path, "w", encoding="utf-8") as f:
-            f.write(html_content)
-
-        # 2. Print PDF using Playwright headless
-        pdf_path = self._pdf_path(job_id)
-        from playwright.sync_api import sync_playwright
-
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
-            page = browser.new_page()
-            abs_html_path = Path(html_path).absolute()
-            page.goto(f"file:///{abs_html_path}", wait_until="networkidle")
-            page.pdf(path=pdf_path, format="A4", margin={"top": "0", "right": "0", "bottom": "0", "left": "0"})
-            browser.close()
-
-        # 3. Validate ATS parseability with PyMuPDF
-        if metadata:
-            extracted_text = self.extract_text(pdf_path)
-            name = getattr(metadata, "name", "")
-            email = getattr(metadata, "email", "")
-            if name and name not in extracted_text or (email and email not in extracted_text):
-                raise ValueError(
-                    f"Generated PDF at {pdf_path} failed ATS validation: contact info not found in extracted text."
-                )
-
+        generator = LatexDocumentGenerator(template_dir=self.template_dir)
+        pdf_path = generator.generate(draft_data, metadata, output_dir=job_dir)
         return pdf_path
 
     def extract_text(self, target: Union[str, Path]) -> str:
