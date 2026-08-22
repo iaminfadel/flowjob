@@ -147,6 +147,7 @@ class PipelineCycleEngine:
         """Scouts for new job postings and adds them to SQLite."""
         print("Scouting for jobs...")
         jobs = []
+        avoid_roles = []
         if url:
             jobs = scrape_linkedin_jobs(url, max_jobs=1)
         else:
@@ -163,6 +164,7 @@ class PipelineCycleEngine:
             try:
                 metadata, _ = parse_master_resume("master_resume.md")
                 target_roles = metadata.preferences.get("target_roles", [])
+                avoid_roles = metadata.preferences.get("avoid_roles", [])
                 work_types = metadata.preferences.get("work_types", [])
                 target_locations = metadata.preferences.get("target_locations", [])
 
@@ -196,15 +198,28 @@ class PipelineCycleEngine:
                 jobs.extend(scrape_linkedin_jobs(search_url, max_jobs=max_scrape))
 
         new_jobs_added = 0
+        skipped_by_avoid = 0
         for j in jobs:
+            if self._title_matches_avoid(j.title, avoid_roles):
+                skipped_by_avoid += 1
+                continue
             existing = session.get(Job, j.id)
             if not existing:
                 session.add(j)
                 new_jobs_added += 1
 
         session.commit()
-        print(f"Scout found {len(jobs)} jobs. {new_jobs_added} are new and added to DB.")
+        print(
+            f"Scout found {len(jobs)} jobs. {new_jobs_added} are new and added to DB."
+            + (f" {skipped_by_avoid} skipped by avoid_roles." if skipped_by_avoid else "")
+        )
         return new_jobs_added
+
+    @staticmethod
+    def _title_matches_avoid(title: str, avoid_patterns: list) -> bool:
+        """Case-insensitive substring match of job title against avoid_roles."""
+        title_lower = (title or "").lower()
+        return any(str(p).lower() in title_lower for p in avoid_patterns)
 
     def process_retries(self, session: Session) -> int:
         statement = select(ErrorRecord).where(ErrorRecord.retry_count > 0).where(ErrorRecord.retry_count < 3)

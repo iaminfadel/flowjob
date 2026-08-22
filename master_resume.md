@@ -70,9 +70,9 @@ skills:
 # 4. PREFERENCES & TARGET ROLES
 # This helps the Analyst agent filter out jobs that don't match your goals.
 preferences:
-  target_roles: ["Robotics Engineering", "Mechatronics Engineering"]
-  avoid_roles: []
-  work_types: []
+  target_roles: ["Robotics Software Engineer", "Embedded Software Engineer", "ROS Developer", "Autonomous Systems Engineer", "Firmware Engineer", "Control Systems Engineer", "Mechatronics Engineer"]
+  avoid_roles: ["BIM", "Technical Office", "Site Engineer", "Civil", "Architect", "Sales", "Marketing", "Teacher", "Instructor", "Intern", "Trainee"]
+  work_types: ["Remote"]
   target_locations: ["Egypt"]
   min_salary_usd: null # Optional, set to null if not applicable
 
