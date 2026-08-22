@@ -77,12 +77,16 @@ The continuous hosting of the pipeline's repeated cycles, separated by jittered 
 _Avoid_: watch mode, watcher
 
 **Cycle**:
-One full pipeline run within a watch session — scout through applicator over the current job queue.
+One full pipeline run within a watch session — scout through applicator over the current job queue. Executed by the pipeline engine; hosts (CLI watch, TUI cockpit) call it through `run_pipeline`, which returns a cycle summary.
 _Avoid_: run (ambiguous with the persisted pipeline run record), pipeline cycle
 
 **Countdown**:
-The jittered wait between cycles within a watch session — a random draw between a configured minimum and maximum wait (default 45–90 minutes).
+The jittered wait between cycles within a watch session — a random draw between a configured minimum and maximum wait (default 45–90 minutes). Owned by the shared watch loop, never re-implemented by a host.
 _Avoid_: sleep, jitter period
 
 **Cycle summary**:
-The outcome record of one cycle — applied/skipped/unfixable/failed counts, duration, and LLM spend delta — shown in the watch area at cycle end.
+The outcome record of one cycle — applied/skipped/unfixable/failed counts, duration, and LLM spend delta — returned by `run_pipeline` as `CycleSummaryResult` and shown in the watch area at cycle end. Hosts read counts from the summary; they never diff database snapshots.
+
+**Watch loop**:
+The single shared implementation of the repeat-cycles discipline (`pipeline/watch_loop.py`) — jitter draw, stop polling, skip event. Both `flowjob watch` and the TUI cockpit host run it; they customize behaviour only through callbacks, never by branching on who is hosting.
+_Avoid_: watch mode loop, watcher loop

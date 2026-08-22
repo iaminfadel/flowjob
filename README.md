@@ -112,6 +112,11 @@ for headed Playwright launches (VNC/SSH -X setups).
 
 ```bash
 uv run pytest            # unit + integration suites, Textual Pilot tests
+FLOWJOB_E2E=1 uv run pytest -m e2e   # real-browser scout test vs live LinkedIn (opt-in)
 uv run mypy src/tui src/pipeline/watch_lock.py src/pipeline/retry.py src/agents/applicator.py --explicit-package-bases
 uv run python scripts/screenshot_cockpit.py   # regenerate docs/screenshots/*.svg
 ```
+
+E2E tests hit real LinkedIn and need a valid session (`flowjob login` first);
+they are skipped unless `FLOWJOB_E2E=1`. Failures there are real signals —
+mocked tests can only prove the seams, never the scrape.
