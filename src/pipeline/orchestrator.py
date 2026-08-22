@@ -19,7 +19,7 @@ from src.agents.runner import AgentRunner
 from src.agents.scout import scrape_linkedin_jobs
 from src.utils.resume_parser import parse_master_resume
 from src.storage.document_store import DiskDocumentStore, DocumentStore
-from src.pipeline.engine import SessionHealthError, CycleSummaryResult
+from src.pipeline.types import CycleSummaryResult, SessionHealthError  # noqa: F401
 
 
 def save_draft_json(job_id: str, draft_data: dict, output_dir: str = "data/resumes") -> str:

@@ -26,25 +26,7 @@ from src.tools.browser import check_session_health
 from src.utils.resume_parser import parse_master_resume
 
 
-class SessionHealthError(RuntimeError):
-    """Raised when the browser session health probe fails inside an in-process host."""
-
-
-@dataclass
-class CycleSummaryResult:
-    """Summary outcomes of a single pipeline cycle."""
-    duration_s: float = 0.0
-    jobs_scouted: int = 0
-    jobs_analyzed: int = 0
-    jobs_tailored: int = 0
-    jobs_needs_evidence: int = 0
-    jobs_unfixable: int = 0
-    jobs_edited: int = 0
-    jobs_applied: int = 0
-    jobs_skipped: int = 0
-    jobs_failed: int = 0
-    halted_reason: Optional[str] = None
-    counts_delta: Dict[str, int] = field(default_factory=dict)
+from src.pipeline.types import CycleSummaryResult, SessionHealthError  # noqa: F401 — canonical home is types.py
 
 
 def default_notify_user(title: str, message: str) -> None:
