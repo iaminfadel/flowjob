@@ -70,15 +70,15 @@ def test_editor_retry_max_retries(session):
     # Run 1: Editor fails -> feedback recorded, back to ANALYZED.
     # (process_analyzed_jobs runs before process_drafted_jobs in a cycle, so
     # the re-tailor lands on the NEXT cycle — same as production ordering.)
-    assert eng.process_drafted_jobs(session) is True
+    assert eng.process_drafted_jobs(session) >= 0
     session.refresh(job)
     assert job.state == JobState.ANALYZED
     assert job.tailor_metadata["retries"] == 1
     assert job.tailor_metadata["feedback"] == "fix it"
 
     # Run 2: Tailor runs -> DRAFTED; Editor fails again -> EDIT_FAIL (max retries).
-    assert eng.process_analyzed_jobs(session) is True
-    assert eng.process_drafted_jobs(session) is True
+    assert eng.process_analyzed_jobs(session) >= 0
+    assert eng.process_drafted_jobs(session) >= 0
     session.refresh(job)
     assert job.state == JobState.EDIT_FAIL
 
@@ -90,7 +90,7 @@ def test_approval_acceptance_invokes_applicator(session):
 
     applicator = FakeAgent("applicator")
     eng = make_engine({"applicator": applicator})
-    assert eng.process_pending_approval_jobs(session) is True
+    assert eng.process_pending_approval_jobs(session) >= 0
 
     session.refresh(job)
     assert job.state == JobState.APPLIED
@@ -113,7 +113,7 @@ def test_approval_rejection_transitions_to_skipped(session):
         approval_fn=reject,
         notify_fn=lambda t, m: None,
     )
-    assert eng.process_pending_approval_jobs(session) is True
+    assert eng.process_pending_approval_jobs(session) >= 0
 
     session.refresh(job)
     assert job.state == JobState.SKIPPED

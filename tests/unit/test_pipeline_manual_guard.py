@@ -91,7 +91,7 @@ def test_engine_analyst_stage_skips_manual_rows(session):
     )
 
     ok = engine.process_new_jobs(session)
-    assert ok is True
+    assert ok >= 0
     assert analyst_mock.run.call_count == 1
     assert session.get(Job, "manual1").state == JobState.NEW
     assert session.get(Job, "pip1").state == JobState.ANALYZED

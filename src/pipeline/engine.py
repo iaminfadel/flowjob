@@ -237,15 +237,17 @@ class PipelineCycleEngine:
             print(f"Retrying {count} transient errors...")
         return count
 
-    def process_new_jobs(self, session: Session) -> bool:
+    def process_new_jobs(self, session: Session) -> int:
+        """Returns transitions count, or -1 when halted (CAPTCHA)."""
         analyst_agent = self.agents.get("analyst")
         if not analyst_agent:
-            return True
+            return 0
 
         min_fit_score = self.config.get("analyst", {}).get("min_fit_score", 70)
         statement = pipeline_only(select(Job).where(Job.state == JobState.NEW))
         new_jobs = session.exec(statement).all()
         print(f"Found {len(new_jobs)} NEW jobs.")
+        transitions = 0
 
         for job in new_jobs:
             print(f"Analyzing job: {job.title} at {job.company}")
@@ -262,17 +264,20 @@ class PipelineCycleEngine:
                     print(f"Job {j.id} below fit threshold. State -> SKIPPED")
 
             if not self._execute_stage_step(session, "AnalystAgent", job, JobState.NEW, _step):
-                return False
-        return True
+                return -1
+            transitions += 1
+        return transitions
 
-    def process_analyzed_jobs(self, session: Session) -> bool:
+    def process_analyzed_jobs(self, session: Session) -> int:
+        """Returns transitions count, or -1 when halted (CAPTCHA)."""
         tailor_agent = self.agents.get("tailor")
         if not tailor_agent:
-            return True
+            return 0
 
         statement = pipeline_only(select(Job).where(Job.state == JobState.ANALYZED))
         analyzed_jobs = session.exec(statement).all()
         print(f"Found {len(analyzed_jobs)} ANALYZED jobs.")
+        transitions = 0
 
         for job in analyzed_jobs:
             print(f"Tailoring resume for job: {job.title} at {job.company}")
@@ -296,19 +301,21 @@ class PipelineCycleEngine:
                 j.state = JobState.DRAFTED
 
             if not self._execute_stage_step(session, "TailorAgent", job, JobState.TAILOR_FAIL, _step):
-                return False
-        return True
+                return -1
+            transitions += 1
+        return transitions
 
-    def process_evidence_loop(self, session: Session) -> bool:
+    def process_evidence_loop(self, session: Session) -> int:
+        """Returns jobs processed count, or -1 when halted (CAPTCHA)."""
         critic_agent = self.agents.get("critic")
         writer_agent = self.agents.get("writer")
         if not (critic_agent and writer_agent):
-            return True
+            return 0
 
         statement = pipeline_only(select(Job).where(Job.state == JobState.DRAFTED))
         drafted_jobs = session.exec(statement).all()
         if not drafted_jobs:
-            return True
+            return 0
 
         print(f"Found {len(drafted_jobs)} DRAFTED jobs in evidence loop.")
         from src.agents.grilling_session import GrillingSession
@@ -327,6 +334,7 @@ class PipelineCycleEngine:
         elif hasattr(writer_cfg, "max_writer_rounds"):
             max_rounds = writer_cfg.max_writer_rounds
 
+        processed = 0
         for job in drafted_jobs:
             if job.cv_path and job.cv_path.endswith(".pdf") and (
                 os.path.exists(job.cv_path) or job.cv_path.startswith("memory://")
@@ -405,17 +413,20 @@ class PipelineCycleEngine:
                 print(f"Generated PDF for converged draft: {pdf_path}")
 
             if not self._execute_stage_step(session, "EvidenceLoop", job, JobState.TAILOR_FAIL, _step):
-                return False
-        return True
+                return -1
+            processed += 1
+        return processed
 
-    def process_drafted_jobs(self, session: Session) -> bool:
+    def process_drafted_jobs(self, session: Session) -> int:
+        """Returns transitions count, or -1 when halted (CAPTCHA)."""
         editor_agent = self.agents.get("editor")
         if not editor_agent:
-            return True
+            return 0
 
         statement = pipeline_only(select(Job).where(Job.state == JobState.DRAFTED))
         drafted_jobs = session.exec(statement).all()
         print(f"Found {len(drafted_jobs)} DRAFTED jobs.")
+        transitions = 0
 
         for job in drafted_jobs:
             print(f"Editing resume for job: {job.title} at {job.company}")
@@ -451,10 +462,11 @@ class PipelineCycleEngine:
                         j.state = JobState.EDIT_FAIL
 
             if not self._execute_stage_step(session, "EditorAgent", job, JobState.DRAFTED, _step):
-                return False
-        return True
+                return -1
+            transitions += 1
+        return transitions
 
-    def process_edited_jobs(self, session: Session) -> None:
+    def process_edited_jobs(self, session: Session) -> int:
         statement = pipeline_only(select(Job).where(Job.state == JobState.EDITED))
         edited_jobs = session.exec(statement).all()
         print(f"Found {len(edited_jobs)} EDITED jobs.")
@@ -464,17 +476,20 @@ class PipelineCycleEngine:
             print(f"Job {job.id} moved to PENDING_APPROVAL.")
             session.add(job)
         session.commit()
+        return len(edited_jobs)
 
-    def process_pending_approval_jobs(self, session: Session) -> bool:
+    def process_pending_approval_jobs(self, session: Session) -> int:
+        """Returns jobs processed count, or -1 when halted (CAPTCHA)."""
         applicator_agent = self.agents.get("applicator")
         if not applicator_agent:
-            return True
+            return 0
 
         statement = pipeline_only(select(Job).where(Job.state == JobState.PENDING_APPROVAL))
         pending_jobs = session.exec(statement).all()
         if pending_jobs:
             print(f"Found {len(pending_jobs)} PENDING_APPROVAL jobs.")
 
+        processed = 0
         for job in pending_jobs:
             def _step(j):
                 if self.approval_fn(j):
@@ -490,8 +505,9 @@ class PipelineCycleEngine:
                     j.state = JobState.SKIPPED
 
             if not self._execute_stage_step(session, "ApplicatorAgent", job, JobState.FAILED, _step):
-                return False
-        return True
+                return -1
+            processed += 1
+        return processed
 
     @staticmethod
     def _state_counts(session: Session) -> dict[str, int]:
@@ -503,6 +519,13 @@ class PipelineCycleEngine:
             )
             for state in tracked
         }
+
+    @staticmethod
+    def _needs_evidence_count(session: Session) -> int:
+        return len(session.exec(select(Job).where(Job.state == JobState.NEEDS_EVIDENCE)).all())
+
+    def _halted(self, t0: float) -> CycleSummaryResult:
+        return CycleSummaryResult(duration_s=time.monotonic() - t0, halted_reason="CAPTCHA_DETECTED")
 
     def run_cycle(
         self,
@@ -526,28 +549,35 @@ class PipelineCycleEngine:
         self.process_retries(session)
 
         # Stage 3: Analyst
-        if not self.process_new_jobs(session):
-            return CycleSummaryResult(duration_s=time.monotonic() - t0, halted_reason="CAPTCHA_DETECTED")
+        jobs_analyzed = self.process_new_jobs(session)
+        if jobs_analyzed < 0:
+            return self._halted(t0)
 
         # Stage 4: Tailor
-        if not self.process_analyzed_jobs(session):
-            return CycleSummaryResult(duration_s=time.monotonic() - t0, halted_reason="CAPTCHA_DETECTED")
+        jobs_tailored = self.process_analyzed_jobs(session)
+        if jobs_tailored < 0:
+            return self._halted(t0)
 
         # Stage 5: Evidence Loop (Critic & Writer & Grilling)
-        if not self.process_evidence_loop(session):
-            return CycleSummaryResult(duration_s=time.monotonic() - t0, halted_reason="CAPTCHA_DETECTED")
+        evidence_processed = self.process_evidence_loop(session)
+        if evidence_processed < 0:
+            return self._halted(t0)
 
         # Stage 6: Editor
-        if not self.process_drafted_jobs(session):
-            return CycleSummaryResult(duration_s=time.monotonic() - t0, halted_reason="CAPTCHA_DETECTED")
+        jobs_edited = self.process_drafted_jobs(session)
+        if jobs_edited < 0:
+            return self._halted(t0)
 
         # Stage 7: Edited -> Pending Approval
-        self.process_edited_jobs(session)
+        moved_to_approval = self.process_edited_jobs(session)
 
         # Stage 8: Applicator
+        applied_this_cycle = 0
         if not dry_run:
-            if not self.process_pending_approval_jobs(session):
-                return CycleSummaryResult(duration_s=time.monotonic() - t0, halted_reason="CAPTCHA_DETECTED")
+            processed = self.process_pending_approval_jobs(session)
+            if processed < 0:
+                return self._halted(t0)
+            applied_this_cycle = processed
 
             run_record = PipelineRun(timestamp=datetime.now().isoformat(), success=True)
             session.add(run_record)
@@ -559,7 +589,11 @@ class PipelineCycleEngine:
         return CycleSummaryResult(
             duration_s=duration,
             jobs_scouted=jobs_scouted,
-            jobs_applied=counts_delta.get("APPLIED", 0),
+            jobs_analyzed=max(jobs_analyzed, 0),
+            jobs_tailored=max(jobs_tailored, 0),
+            jobs_needs_evidence=self._needs_evidence_count(session),
+            jobs_edited=moved_to_approval,
+            jobs_applied=max(counts_delta.get("APPLIED", 0), applied_this_cycle),
             jobs_failed=counts_delta.get("FAILED", 0),
             jobs_skipped=counts_delta.get("SKIPPED", 0),
             jobs_unfixable=counts_delta.get("UNFIXABLE", 0),

@@ -80,7 +80,7 @@ def test_evidence_loop_happy_path_e2e(session, doc_store):
         recommendation="apply",
     )
     engine = make_engine({"analyst": mock_analyst}, doc_store)
-    assert engine.process_new_jobs(session) is True
+    assert engine.process_new_jobs(session) >= 0
 
     session.refresh(job)
     assert job.state == JobState.ANALYZED
@@ -95,7 +95,7 @@ def test_evidence_loop_happy_path_e2e(session, doc_store):
         "work": [{"company": "PrevCo", "highlights": ["Built FastAPI microservices"]}],
     }
     engine = make_engine({"tailor": mock_tailor}, doc_store)
-    assert engine.process_analyzed_jobs(session) is True
+    assert engine.process_analyzed_jobs(session) >= 0
 
     session.refresh(job)
     assert job.state == JobState.DRAFTED
@@ -146,7 +146,7 @@ def test_evidence_loop_happy_path_e2e(session, doc_store):
     )
 
     engine = make_engine({"critic": mock_critic, "writer": mock_writer}, doc_store)
-    assert engine.process_evidence_loop(session) is True
+    assert engine.process_evidence_loop(session) >= 0
 
     session.refresh(job)
     assert job.state == JobState.DRAFTED
@@ -159,7 +159,7 @@ def test_evidence_loop_happy_path_e2e(session, doc_store):
         score=95, passed=True, feedback="Excellent resume with verified evidence"
     )
     engine = make_engine({"editor": mock_editor}, doc_store)
-    assert engine.process_drafted_jobs(session) is True
+    assert engine.process_drafted_jobs(session) >= 0
 
     session.refresh(job)
     assert job.state == JobState.EDITED
@@ -205,7 +205,7 @@ def test_evidence_loop_unfixable_e2e(session, doc_store):
     mock_writer = MagicMock()
 
     engine = make_engine({"critic": mock_critic, "writer": mock_writer}, doc_store)
-    assert engine.process_evidence_loop(session) is True
+    assert engine.process_evidence_loop(session) >= 0
 
     session.refresh(job)
     assert job.state == JobState.UNFIXABLE
@@ -240,7 +240,7 @@ def test_evidence_loop_grilling_resume_e2e(session, doc_store):
     mock_writer = MagicMock()
 
     engine = make_engine({"critic": mock_critic, "writer": mock_writer}, doc_store)
-    assert engine.process_evidence_loop(session) is True
+    assert engine.process_evidence_loop(session) >= 0
 
     session.refresh(job)
     assert job.state == JobState.NEEDS_EVIDENCE
@@ -285,7 +285,7 @@ def test_evidence_loop_grilling_resume_e2e(session, doc_store):
         summary="Covered via grilling bullet",
     )
 
-    assert engine.process_evidence_loop(session) is True
+    assert engine.process_evidence_loop(session) >= 0
 
     session.refresh(job)
     assert job.state == JobState.DRAFTED

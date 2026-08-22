@@ -61,7 +61,7 @@ def test_evidence_loop_unfixable(session, tmp_path):
         doc_store=FakeDocStore(base_dir=str(tmp_path / "resumes")),
         notify_fn=lambda t, m: None,
     )
-    assert engine.process_evidence_loop(session) is True
+    assert engine.process_evidence_loop(session) >= 0
 
     job = session.get(Job, "job_unfixable")
     assert job.state == JobState.UNFIXABLE
@@ -98,7 +98,7 @@ def test_evidence_loop_grill_route(session, tmp_path):
         doc_store=FakeDocStore(base_dir=str(tmp_path / "resumes")),
         notify_fn=lambda t, m: None,
     )
-    assert engine.process_evidence_loop(session) is True
+    assert engine.process_evidence_loop(session) >= 0
 
     job = session.get(Job, "job_grill")
     assert job.state == JobState.NEEDS_EVIDENCE
@@ -158,7 +158,7 @@ def test_evidence_loop_fix_and_converge(session, tmp_path):
         doc_store=doc_store,
         notify_fn=lambda t, m: None,
     )
-    assert engine.process_evidence_loop(session) is True
+    assert engine.process_evidence_loop(session) >= 0
 
     session.refresh(job)
     assert job.state == JobState.DRAFTED

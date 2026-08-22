@@ -44,7 +44,7 @@ def test_engine_analyst_stage_success(session):
     )
 
     ok = engine.process_new_jobs(session)
-    assert ok is True
+    assert ok >= 0
 
     session.refresh(job)
     assert job.state == JobState.ANALYZED
@@ -75,7 +75,7 @@ def test_engine_tailor_stage_success(session):
     )
 
     ok = engine.process_analyzed_jobs(session)
-    assert ok is True
+    assert ok >= 0
 
     session.refresh(job)
     assert job.state == JobState.DRAFTED
@@ -110,7 +110,7 @@ def test_engine_evidence_loop_unfixable(session):
     )
 
     ok = engine.process_evidence_loop(session)
-    assert ok is True
+    assert ok >= 0
 
     session.refresh(job)
     assert job.state == JobState.UNFIXABLE
@@ -146,7 +146,7 @@ def test_engine_evidence_loop_needs_evidence_parking(session):
     )
 
     ok = engine.process_evidence_loop(session)
-    assert ok is True
+    assert ok >= 0
 
     session.refresh(job)
     assert job.state == JobState.NEEDS_EVIDENCE
