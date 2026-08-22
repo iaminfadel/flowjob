@@ -10,7 +10,7 @@ from typing import Protocol, cast
 from rich.text import Text
 from textual.app import ComposeResult
 from textual.binding import Binding
-from textual.containers import Horizontal, Vertical, VerticalScroll
+from textual.containers import Grid, Horizontal, Vertical, VerticalScroll
 from textual.message import Message
 from textual.screen import ModalScreen
 from textual.timer import Timer
@@ -50,6 +50,16 @@ class CockpitProtocol(Protocol):
 
     def notify(self, message: str, *, severity: str = "information", title: str | None = None) -> None: ...
 
+    def action_add_manual(self) -> None: ...
+
+    def action_change_state(self) -> None: ...
+
+    def action_retry(self) -> None: ...
+
+    def action_open_url(self) -> None: ...
+
+    def action_open_resume(self) -> None: ...
+
 
 def as_cockpit(app) -> CockpitProtocol:
     return cast(CockpitProtocol, app)
@@ -64,6 +74,18 @@ LOGO = r""" _____ _     _____        __  _  ___  ____
 STATES = [s.value for s in JobState]
 
 FAIL_STATES = {s.value for s in JobState if s.value in {"FAILED", "TAILOR_FAIL", "EDIT_FAIL"}}
+
+BUTTON_ACTIONS: dict[str, str] = {
+    "btn-add-manual": "action_add_manual",
+    "btn-change-state": "action_change_state",
+    "detail-approve": "action_approve",
+    "detail-reject": "action_reject",
+    "detail-grill": "action_grill",
+    "detail-retry": "action_retry",
+    "detail-open-url": "action_open_url",
+    "detail-change-state": "action_change_state",
+    "detail-open-resume": "action_open_resume",
+}
 
 
 def state_style(state: str) -> str:
@@ -228,7 +250,14 @@ class JobDetailPane(VerticalScroll):
         yield Static("", id="detail-cv")
         yield Static("", id="detail-notes", classes="jd")
         yield Static("", id="detail-errors", classes="error-block")
-        yield Static("", id="detail-actions")
+        with Grid(id="detail-actions"):
+            yield Button(Text("[a] Approve"), id="detail-approve")
+            yield Button(Text("[r] Reject"), id="detail-reject")
+            yield Button(Text("[g] Open grill"), id="detail-grill")
+            yield Button(Text("[t] Retry"), id="detail-retry")
+            yield Button(Text("[o] Open URL"), id="detail-open-url")
+            yield Button(Text("[s] Change state"), id="detail-change-state")
+            yield Button(Text("[d] Open resume"), id="detail-open-resume")
         yield Rule()
         yield Label("Job description")
         yield Static("", id="detail-jd", classes="jd")
@@ -286,18 +315,7 @@ class JobDetailPane(VerticalScroll):
             err_widget.update("")
             err_widget.display = False
 
-        hints = []
-        if state == "PENDING_APPROVAL":
-            hints = ["[a] approve", "[r] reject"]
-        elif state == "NEEDS_EVIDENCE":
-            hints = ["[g] open grill"]
-        elif state in FAIL_STATES and src != SOURCE_MANUAL:
-            hints = ["[t] retry"]
-        hints.append("[o] open url")
-        hints.append("[s] change state")
-        if cv:
-            hints.append("[d] open resume dir")
-        self.query_one("#detail-actions", Static).update("   ".join(hints))
+        self._render_actions(state, src, cv)
 
         self.query_one("#detail-jd", Static).update(job["jd_text"])
 
@@ -315,6 +333,18 @@ class JobDetailPane(VerticalScroll):
         else:
             self.query_one("#detail-transcript", Static).update("")
             self.query_one("#detail-transcript", Static).display = False
+
+    def _render_actions(self, state: str, src: str, cv: str) -> None:
+        def show(button_id: str, visible: bool) -> None:
+            self.query_one(f"#{button_id}", Button).display = visible
+
+        show("detail-approve", state == "PENDING_APPROVAL")
+        show("detail-reject", state == "PENDING_APPROVAL")
+        show("detail-grill", state == "NEEDS_EVIDENCE")
+        show("detail-retry", state in FAIL_STATES and src != SOURCE_MANUAL)
+        show("detail-open-url", True)
+        show("detail-change-state", True)
+        show("detail-open-resume", bool(cv))
 
 
 class JobsWorkspace(Horizontal):
@@ -336,11 +366,9 @@ class JobsWorkspace(Horizontal):
                     prompt="Source filter",
                     id="source-filter",
                 )
-            yield Static(
-                "[m] log a manual application · [s] change state",
-                id="jobs-hint",
-                classes="note",
-            )
+            with Grid(id="jobs-hint"):
+                yield Button(Text("[m] Log manual application"), id="btn-add-manual")
+                yield Button(Text("[s] Change state"), id="btn-change-state")
             yield JobsTable(id="jobs-table")
         yield JobDetailPane(id="job-detail")
 
@@ -363,6 +391,12 @@ class JobsWorkspace(Horizontal):
     def on_select_changed(self, event: Select.Changed) -> None:
         if event.select.id in ("state-filter", "source-filter"):
             self.refresh_table()
+
+    def on_button_pressed(self, event: Button.Pressed) -> None:
+        handler = BUTTON_ACTIONS.get(event.button.id or "")
+        if handler:
+            event.stop()
+            getattr(as_cockpit(self.app), handler)()
 
     def on_data_table_row_selected(self, event: DataTable.RowSelected) -> None:
         self._show_row(event.row_key.value)

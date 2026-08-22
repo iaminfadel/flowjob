@@ -124,8 +124,11 @@ Screen {
     color: $text-muted;
 }
 
-#detail-actions {
-    color: $primary;
+#detail-actions, #jobs-hint {
+    grid-size: 2;
+    grid-rows: auto;
+    height: auto;
+    margin-bottom: 1;
 }
 
 .error-block {
@@ -239,7 +242,7 @@ class CockpitApp(App):
         Binding("g", "grill", "Open grill", show=False),
         Binding("t", "retry", "Retry", show=False),
         Binding("o", "open_url", "Open URL", show=False),
-        Binding("d", "open_dir", "Open resume dir", show=False),
+        Binding("d", "open_resume", "Open resume", show=False),
         Binding("m", "add_manual", "Log manual application", show=False),
         Binding("s", "change_state", "Change state", show=False),
         Binding("ctrl+r", "refresh", "Refresh", show=False),
@@ -433,15 +436,13 @@ class CockpitApp(App):
             return
         self.push_screen(ChangeStateModal(job))
 
-    def action_open_dir(self) -> None:
-        import os
-
+    def action_open_resume(self) -> None:
         job = self._selected()
         if not job:
             self.notify("Select a job in the Jobs tab first", severity="warning")
             return
-        path = os.path.dirname(job["cv_path"] or "")
-        if not path or not os.path.isdir(path):
-            self.notify("No resume directory for this job yet", severity="warning")
+        path = job["cv_path"] or ""
+        if not path or not os.path.isfile(path):
+            self.notify("No resume file for this job yet", severity="warning")
             return
-        webbrowser.open(f"file://{path}")
+        webbrowser.open(f"file://{os.path.abspath(path)}")

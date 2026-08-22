@@ -71,17 +71,19 @@ refresh jobs table + dashboard counts.
 | State | Actions |
 |---|---|
 | NEW, ANALYZED, DRAFTED, EDITED | view only |
-| PENDING_APPROVAL | Approve / Reject (gate-False → SKIPPED; REJECTED enum stays dead), open URL, open resume dir |
+| PENDING_APPROVAL | Approve / Reject (gate-False → SKIPPED; REJECTED enum stays dead), open URL, open resume |
 | NEEDS_EVIDENCE | Open grill (worker-hosted chat, `input_fn` queue, transcript checkpointed per turn), view gaps |
 | FAILED, TAILOR_FAIL, EDIT_FAIL | Retry (re-queue per agent + reset retry_count), view error block (ErrorRecord: agent/type/stack/count) |
 | APPLIED, SKIPPED, UNFIXABLE, REJECTED | view only |
-| all | open URL; open resume dir `data/resumes/<job_id>/` when `cv_path` set |
+| all | open URL; open resume file `cv_path` when set |
 
 Detail pane: always meta (location, posted, URL) + state/fit/edit scores + JD; conditional —
 grilling transcript with per-gap status badges (pending/completed/dropped), error block for
-fail states, cv/resume-dir line. Actions live in both the HITL inbox and the detail pane (one
-implementation). Note: the design-spec "manual application package" (`output/…` with jd.txt +
-suggested_answers.txt) is **not implemented** — open-dir points at the real artifact dir.
+fail states, cv/resume line. Actions are rendered as clickable button rows in the jobs pane
+(detail actions + log-manual/change-state), each label carrying its key (`[o]`, `[s]`, `[d]`,
+`[t]`, `[a]`, `[r]`, `[g]`, `[m]`); keys also work app-wide. Note: the design-spec "manual
+application package" (`output/…` with jd.txt + suggested_answers.txt) is **not implemented** —
+open-resume opens the actual `cv_path` file.
 
 ## Settings save semantics (from #88)
 

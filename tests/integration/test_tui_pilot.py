@@ -12,7 +12,7 @@ import uuid
 from datetime import datetime
 
 import pytest
-from textual.widgets import DataTable, Input, Select, TabbedContent, TextArea
+from textual.widgets import Button, DataTable, Input, Select, TabbedContent, TextArea
 
 from src.db.models import Job, JobState, LLMInteraction
 from src.db.store import get_session, init_db
@@ -671,8 +671,14 @@ async def test_manual_failed_row_has_no_retry_hint(app, cockpit_env):
         table.move_cursor(row=idx, column=0)
         await pilot.pause()
 
-        actions = str(app.query_one("#detail-actions").content)
-        assert "[t] retry" not in actions, f"manual rows must not invite retry, got: {actions}"
+        labels = [
+            str(b.label)
+            for b in app.query_one("#detail-actions").query(Button)
+            if b.display
+        ]
+        assert not any("[t]" in label for label in labels), (
+            f"manual rows must not invite retry, got: {labels}"
+        )
 
 
 async def test_hitl_inboxes_exclude_manual_rows(app, cockpit_env):
@@ -727,3 +733,155 @@ async def test_retry_action_refuses_manual_row(app, monkeypatch, cockpit_env):
 
         assert any("never pipeline work" in n for n in notes), notes
         assert queries.job_detail(table.row_job_ids[idx])["state"] == "FAILED"
+
+
+async def test_detail_action_buttons_render(app, cockpit_env):
+    from src.tui import queries
+    from src.tui.widgets import JobsTable
+
+    async with app.run_test(size=(140, 40)) as pilot:
+        tabs = app.query_one(TabbedContent)
+        tabs.active = "jobs"
+        await pilot.pause()
+
+        table = app.query_one(JobsTable)
+        table.move_cursor(row=0, column=0)
+        await pilot.pause()
+
+        labels = [
+            str(b.label)
+            for b in app.query_one("#detail-actions").query(Button)
+            if b.display
+        ]
+        assert "[o] Open URL" in labels, labels
+        assert "[s] Change state" in labels, labels
+        assert "[d] Open resume" not in labels, labels
+
+        job = queries.jobs("ALL")[0]
+        with get_session(queries.engine()) as session:
+            db_job = session.get(Job, job["id"])
+            db_job.cv_path = "/tmp/flowjob-tui-resume.pdf"
+            session.commit()
+        app.refresh_all()
+        await pilot.pause()
+
+        labels = [
+            str(b.label)
+            for b in app.query_one("#detail-actions").query(Button)
+            if b.display
+        ]
+        assert "[d] Open resume" in labels, labels
+
+
+async def test_jobs_hint_buttons_open_modals(app, monkeypatch, cockpit_env):
+    from src.tui.widgets import AddJobModal, ChangeStateModal, JobsTable
+
+    async with app.run_test(size=(140, 40)) as pilot:
+        tabs = app.query_one(TabbedContent)
+        tabs.active = "jobs"
+        await pilot.pause()
+
+        await pilot.click("#btn-add-manual")
+        await wait_modal_widget(pilot, app, "add-title", "add form fields")
+        assert isinstance(app.screen, AddJobModal)
+        await pilot.press("escape")
+        await pilot.pause()
+
+        table = app.query_one(JobsTable)
+        table.move_cursor(row=0, column=0)
+        await pilot.pause()
+
+        await pilot.click("#btn-change-state")
+        await wait_modal_widget(pilot, app, "change-state-select", "change-state modal")
+        assert isinstance(app.screen, ChangeStateModal)
+
+
+async def test_detail_buttons_click_dispatch(app, monkeypatch, cockpit_env):
+    from src.tui import queries
+    from src.tui.widgets import JobsTable
+
+    opened = []
+    monkeypatch.setattr("webbrowser.open", lambda url: opened.append(url))
+    notes = []
+    monkeypatch.setattr(app, "notify", lambda msg, **kw: notes.append(msg))
+
+    async with app.run_test(size=(140, 40)) as pilot:
+        tabs = app.query_one(TabbedContent)
+        tabs.active = "jobs"
+        await pilot.pause()
+
+        table = app.query_one(JobsTable)
+        failed = next(j for j in queries.jobs("ALL") if j["state"] == "FAILED")
+        idx = table.row_job_ids.index(failed["id"])
+        table.move_cursor(row=idx, column=0)
+        await pilot.pause()
+
+        await pilot.click("#detail-open-url")
+        await pilot.pause()
+        assert opened == [failed["url"]], opened
+
+        await pilot.click("#detail-retry")
+        await pilot.pause()
+        assert queries.job_detail(failed["id"])["state"] != "FAILED", "retry must re-queue"
+
+        pending = next(j for j in queries.jobs("ALL") if j["state"] == "PENDING_APPROVAL")
+        idx = table.row_job_ids.index(pending["id"])
+        table.move_cursor(row=idx, column=0)
+        await pilot.pause()
+
+        await pilot.click("#detail-approve")
+        await pilot.pause()
+        assert any("No active cycle is awaiting approval" in n for n in notes), notes
+
+
+async def test_open_resume_opens_file_directly(app, monkeypatch, tmp_path, cockpit_env):
+    from src.tui import queries
+    from src.tui.widgets import JobsTable
+
+    cv = tmp_path / "resume.pdf"
+    cv.write_bytes(b"fake-pdf")
+    job = queries.jobs("ALL")[0]
+    with get_session(queries.engine()) as session:
+        db_job = session.get(Job, job["id"])
+        db_job.cv_path = str(cv)
+        session.commit()
+
+    opened = []
+    monkeypatch.setattr("webbrowser.open", lambda url: opened.append(url))
+
+    async with app.run_test(size=(140, 40)) as pilot:
+        tabs = app.query_one(TabbedContent)
+        tabs.active = "jobs"
+        await pilot.pause()
+
+        table = app.query_one(JobsTable)
+        idx = table.row_job_ids.index(job["id"])
+        table.move_cursor(row=idx, column=0)
+        await pilot.pause()
+
+        await pilot.click("#detail-open-resume")
+        await pilot.pause()
+
+        assert opened == [f"file://{cv}"], f"must open the resume file, not the dir: {opened}"
+
+
+async def test_open_resume_without_file_warns(app, monkeypatch, cockpit_env):
+    from src.tui import queries
+    from src.tui.widgets import JobsTable
+
+    notes = []
+    monkeypatch.setattr(app, "notify", lambda msg, **kw: notes.append(msg))
+
+    async with app.run_test(size=(140, 40)) as pilot:
+        tabs = app.query_one(TabbedContent)
+        tabs.active = "jobs"
+        await pilot.pause()
+
+        table = app.query_one(JobsTable)
+        table.move_cursor(row=0, column=0)
+        await pilot.pause()
+
+        app.action_open_resume()
+        await pilot.pause()
+
+        assert any("No resume file" in n for n in notes), notes
