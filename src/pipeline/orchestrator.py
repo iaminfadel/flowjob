@@ -14,7 +14,7 @@ from typing import Any, Callable, Optional
 from src.config import load_config
 from src.db.store import get_session, init_db
 from src.pipeline.engine import PipelineCycleEngine
-from src.pipeline.types import CycleSummaryResult, SessionHealthError  # noqa: F401
+from src.pipeline.types import CycleSummaryResult, SessionHealthError  # noqa: F401 — canonical home: types.py
 from src.storage.document_store import DiskDocumentStore
 
 
@@ -67,13 +67,12 @@ def run_pipeline(
         raise SessionHealthError("LinkedIn session health check failed.")
 
     cfg = load_config(config_path)
-    config = cfg.model_dump()
     if db_path is None:
         db_path = cfg.data.db_path
     engine_db = init_db(db_path)
 
     cycle_engine = PipelineCycleEngine(
-        config=config,
+        config=cfg,
         agents=agents,
         doc_store=doc_store or DiskDocumentStore(),
         approval_fn=approval_fn or prompt_user_approval,

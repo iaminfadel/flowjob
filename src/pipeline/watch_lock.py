@@ -7,6 +7,7 @@ Uses fcntl on POSIX and msvcrt on Windows to prevent two watch loops
 import contextlib
 import os
 import sys
+from typing import Optional
 
 
 class WatchLockHeldError(RuntimeError):
@@ -14,12 +15,15 @@ class WatchLockHeldError(RuntimeError):
 
 
 @contextlib.contextmanager
-def acquire_watch_lock(lock_path: str = ".flowjob-watch.lock"):
+def acquire_watch_lock(lock_path: Optional[str] = None):
     """Exclusively claim the watch lock; fails fast if another watcher holds it.
 
-    The lock is released automatically when the context exits or if the
-    owning process dies.
+    lock_path defaults to $FLOWJOB_WATCH_LOCK or ".flowjob-watch.lock". The
+    lock is released automatically when the context exits or if the owning
+    process dies.
     """
+    if lock_path is None:
+        lock_path = os.environ.get("FLOWJOB_WATCH_LOCK", ".flowjob-watch.lock")
     fd = os.open(lock_path, os.O_CREAT | os.O_RDWR, 0o644)
     _closed = False
     try:

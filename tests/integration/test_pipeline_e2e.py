@@ -6,7 +6,8 @@ verifies the host adapter crosses the right seams.
 
 from unittest.mock import patch, MagicMock
 from src.cli import build_agents
-from src.pipeline.orchestrator import run_pipeline, SessionHealthError
+from src.pipeline.orchestrator import run_pipeline
+from src.pipeline.types import SessionHealthError
 
 
 def test_build_agents_creates_all_agents():

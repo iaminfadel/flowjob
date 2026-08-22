@@ -112,7 +112,7 @@ class WatchManager:
 
     def _run(self) -> None:
         from src.config import load_config
-        from src.pipeline.orchestrator import SessionHealthError
+        from src.pipeline.types import SessionHealthError
         from src.pipeline.watch_loop import run_watch_loop
         from src.pipeline.watch_lock import acquire_watch_lock, WatchLockHeldError
 

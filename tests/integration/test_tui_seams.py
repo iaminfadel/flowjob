@@ -8,7 +8,8 @@ import pytest
 from unittest.mock import patch, MagicMock
 from sqlmodel import Session, SQLModel, create_engine
 from src.db.models import Job, JobState
-from src.pipeline.orchestrator import run_pipeline, SessionHealthError
+from src.pipeline.orchestrator import run_pipeline
+from src.pipeline.types import SessionHealthError
 
 
 class FakeAgent:

@@ -25,7 +25,7 @@ from src.storage.document_store import DiskDocumentStore, DocumentStore
 from src.utils.resume_parser import parse_master_resume
 
 
-from src.pipeline.types import CycleSummaryResult, SessionHealthError  # noqa: F401 — canonical home is types.py
+from src.pipeline.types import CycleSummaryResult, SessionHealthError  # noqa: F401
 
 
 def default_notify_user(title: str, message: str) -> None:
@@ -50,14 +50,21 @@ class PipelineCycleEngine:
 
     def __init__(
         self,
-        config: Optional[dict] = None,
+        config: Optional[Any] = None,
         agents: Optional[Dict[str, Any]] = None,
         doc_store: Optional[DocumentStore] = None,
         approval_fn: Optional[Callable[[Job], bool]] = None,
         wait_fn: Optional[Callable[[str], None]] = None,
         notify_fn: Optional[Callable[[str, str], None]] = None,
     ):
-        self.config = config or {}
+        # config is a FlowJobConfig from production hosts; tests may pass a
+        # plain dict (accessed via .get below). Normalized once here.
+        if config is None:
+            self.config: Any = {}
+        elif isinstance(config, dict):
+            self.config = config
+        else:
+            self.config = config.model_dump()
         self.agents = agents or {}
         self.doc_store = doc_store or DiskDocumentStore()
         self.approval_fn = approval_fn or default_prompt_approval
@@ -486,6 +493,17 @@ class PipelineCycleEngine:
                 return False
         return True
 
+    @staticmethod
+    def _state_counts(session: Session) -> dict[str, int]:
+        """Absolute counts of the summary-tracked states."""
+        tracked = (JobState.APPLIED, JobState.FAILED, JobState.SKIPPED, JobState.UNFIXABLE)
+        return {
+            state.value: len(
+                session.exec(select(Job).where(Job.state == state)).all()
+            )
+            for state in tracked
+        }
+
     def run_cycle(
         self,
         session: Session,
@@ -494,12 +512,7 @@ class PipelineCycleEngine:
     ) -> CycleSummaryResult:
         """Executes a full deterministic pipeline cycle."""
         t0 = time.monotonic()
-        counts_before = {
-            state.value: session.exec(select(Job).where(Job.state == getattr(JobState, state.name))).all().__len__()
-            for state in (
-                JobState.APPLIED, JobState.FAILED, JobState.SKIPPED, JobState.UNFIXABLE,
-            )
-        }
+        before = self._state_counts(session)
         print(f"Pipeline cycle started with url={url} and dry_run={dry_run}")
 
         # NOTE: the LinkedIn session-health probe lives at the HOST layer
@@ -507,10 +520,10 @@ class PipelineCycleEngine:
         # healthy session and never launches a browser itself.
 
         # Stage 1: Scout
-        self.jobs_scouted = self.process_scout(session, url)
+        jobs_scouted = self.process_scout(session, url)
 
         # Stage 2: Retries
-        self.jobs_retried = self.process_retries(session)
+        self.process_retries(session)
 
         # Stage 3: Analyst
         if not self.process_new_jobs(session):
@@ -541,16 +554,11 @@ class PipelineCycleEngine:
             session.commit()
 
         duration = time.monotonic() - t0
-        counts_after = {
-            state.value: len(
-                session.exec(select(Job).where(Job.state == getattr(JobState, state.name))).all()
-            )
-            for state in (JobState.APPLIED, JobState.FAILED, JobState.SKIPPED, JobState.UNFIXABLE)
-        }
-        counts_delta = {k: counts_after[k] - v for k, v in counts_before.items()}
+        after = self._state_counts(session)
+        counts_delta = {k: after[k] - v for k, v in before.items()}
         return CycleSummaryResult(
             duration_s=duration,
-            jobs_scouted=getattr(self, "jobs_scouted", 0),
+            jobs_scouted=jobs_scouted,
             jobs_applied=counts_delta.get("APPLIED", 0),
             jobs_failed=counts_delta.get("FAILED", 0),
             jobs_skipped=counts_delta.get("SKIPPED", 0),
