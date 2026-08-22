@@ -26,8 +26,13 @@ class ApprovalManager:
         self._pending: dict[str, queue.Queue[bool]] = {}
         self._lock = threading.Lock()
 
-    def request(self, job_id: str) -> bool:
-        """Blocking call, runs on the pipeline worker thread."""
+    def request(self, job) -> bool:
+        """Blocking call, runs on the pipeline worker thread.
+
+        Accepts either a job id string or a Job object (the pipeline seam
+        passes the model); only the id is used as the pending key.
+        """
+        job_id: str = getattr(job, "id", job)
         q: queue.Queue[bool] = queue.Queue(maxsize=1)
         with self._lock:
             self._pending[job_id] = q
