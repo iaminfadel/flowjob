@@ -31,6 +31,9 @@ packages = ["src"]
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "function"
+markers = [
+    "e2e: real-browser end-to-end tests; skipped unless FLOWJOB_E2E=1 is set",
+]
 
 [dependency-groups]
 dev = [

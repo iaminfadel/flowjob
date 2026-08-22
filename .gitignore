@@ -31,5 +31,4 @@ diff.txt
 *.log
 *.patch
 flowjob.db
-master_resume.md
 .flowjob-watch.lock
