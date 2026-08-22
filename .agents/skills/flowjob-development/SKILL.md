@@ -29,6 +29,13 @@ LinkedIn actively fights automation. You must build for resilience:
   - Fail fast on CAPTCHAs or redirect loops. Halt the pipeline; do NOT blindly retry.
 - **Unknown Fields:** If the Easy Apply form asks an unrecognized question, take a screenshot, pause the pipeline, and wait for human input. Never guess or hallucinate answers.
 
+## 5. Pipeline architecture (verified Aug 2026)
+
+- **One pipeline implementation.** `src/pipeline/orchestrator.py` (`run_pipeline`) is the production path; `src/pipeline/engine.py` (`PipelineCycleEngine`) duplicated it and was only exercised by unit tests — the tested copy was the dead copy. When touching pipeline logic, first confirm which copy is live via the import graph (`grep -rn "run_pipeline\|PipelineCycleEngine" src tests`), never assume the unit-tested one ships.
+- **Test-reality gap warning:** heavy-mock integration tests (`test_orchestrator*.py`, `test_pipeline_e2e.py`) patch 6-8 internals each (`process_scout`, `init_db`, `get_session`, `yaml.safe_load`) — they verify call-wiring, not behaviour, and passed while manual runs failed. New pipeline tests must mock at true seams only (LLM client, browser driver), using real in-memory SQLite + tmp dirs + fake agents.
+- **Known friction to not re-create:** config read twice (`load_config` vs raw `yaml.safe_load` inside orchestrator); LLM failover loops hand-rolled per agent around `llm_factory`; watch loop duplicated between `cli.watch` and `tui/watch.py`; TUI back-imports `src.cli.build_agents`; LinkedIn query-URL knowledge split between orchestrator and scout.
+- **Refactor conventions for this repo:** staged atomic commits, each leaving `pytest` green; internal interfaces may break freely (update all callers in the same commit).
+
 ## 4. Graceful Degradation
 - If automation fails, the system must output a **Manual Application Package** (tailored PDF, JD text, suggested answers) so the user can apply themselves.
 

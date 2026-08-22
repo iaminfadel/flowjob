@@ -108,6 +108,10 @@ Good interfaces make testing natural:
 - **"Interface" as the TypeScript `interface` keyword or a class's public methods**: too narrow — interface here includes every fact a caller must know.
 - **"Boundary"**: overloaded with DDD's bounded context. Say **seam** or **interface**.
 
+## Pitfalls
+
+- **Green tests can guard a dead copy.** Before judging a module by its test coverage, verify via the import graph that the unit-tested code is what production actually runs. In one repo a fully-duplicated pipeline had its *dead* twin unit-tested while the live copy drifted — all tests passed while manual runs failed. When proposing deepening work around heavily-mocked integration tests (5+ patched internals per test), treat that coverage as wiring-checks, not behaviour proof, and propose mocks only at true external seams (LLM client, browser driver) with real in-memory stores + fakes elsewhere.
+
 ## Going deeper
 
 - **Deepening a cluster given its dependencies** — see [DEEPENING.md](DEEPENING.md): dependency categories, seam discipline, and replace-don't-layer testing.
