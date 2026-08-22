@@ -122,7 +122,8 @@ def run_grilling_session(
     model_name: str = "google/gemini-2.5-pro",
     max_turns_per_gap: int = 5,
     llm: Any = None,
-    providers: List[Provider] = None
+    providers: List[Provider] = None,
+    doc_store=None,
 ) -> bool:
     """Execute or resume an interactive grilling session for a job."""
     job = session.get(Job, job_id)
@@ -136,6 +137,7 @@ def run_grilling_session(
         providers=providers,
         llm=llm,
         model_name=model_name,
+        doc_store=doc_store,
     )
     return grill.run_cli(input_fn=input_fn, output_fn=print, max_turns_per_gap=max_turns_per_gap)
 

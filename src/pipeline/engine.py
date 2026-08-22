@@ -22,7 +22,6 @@ from src.agents.scout import scrape_linkedin_jobs
 from src.db.models import ErrorRecord, Job, JobState, PipelineRun
 from src.db.store import is_manual_application, pipeline_only
 from src.storage.document_store import DiskDocumentStore, DocumentStore
-from src.tools.browser import check_session_health
 from src.utils.resume_parser import parse_master_resume
 
 
@@ -495,16 +494,23 @@ class PipelineCycleEngine:
     ) -> CycleSummaryResult:
         """Executes a full deterministic pipeline cycle."""
         t0 = time.monotonic()
+        counts_before = {
+            state.value: session.exec(select(Job).where(Job.state == getattr(JobState, state.name))).all().__len__()
+            for state in (
+                JobState.APPLIED, JobState.FAILED, JobState.SKIPPED, JobState.UNFIXABLE,
+            )
+        }
         print(f"Pipeline cycle started with url={url} and dry_run={dry_run}")
 
-        if not check_session_health():
-            raise SessionHealthError("LinkedIn session health check failed.")
+        # NOTE: the LinkedIn session-health probe lives at the HOST layer
+        # (orchestrator.run_pipeline / watch hosts) — the engine assumes a
+        # healthy session and never launches a browser itself.
 
         # Stage 1: Scout
-        self.process_scout(session, url)
+        self.jobs_scouted = self.process_scout(session, url)
 
         # Stage 2: Retries
-        self.process_retries(session)
+        self.jobs_retried = self.process_retries(session)
 
         # Stage 3: Analyst
         if not self.process_new_jobs(session):
@@ -535,4 +541,20 @@ class PipelineCycleEngine:
             session.commit()
 
         duration = time.monotonic() - t0
-        return CycleSummaryResult(duration_s=duration)
+        counts_after = {
+            state.value: len(
+                session.exec(select(Job).where(Job.state == getattr(JobState, state.name))).all()
+            )
+            for state in (JobState.APPLIED, JobState.FAILED, JobState.SKIPPED, JobState.UNFIXABLE)
+        }
+        counts_delta = {k: counts_after[k] - v for k, v in counts_before.items()}
+        return CycleSummaryResult(
+            duration_s=duration,
+            jobs_scouted=getattr(self, "jobs_scouted", 0),
+            jobs_applied=counts_delta.get("APPLIED", 0),
+            jobs_failed=counts_delta.get("FAILED", 0),
+            jobs_skipped=counts_delta.get("SKIPPED", 0),
+            jobs_unfixable=counts_delta.get("UNFIXABLE", 0),
+            halted_reason=None,
+            counts_delta=counts_delta,
+        )

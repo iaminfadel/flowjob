@@ -137,40 +137,6 @@ def test_engine_retries_skip_manual_rows(session):
     assert session.get(Job, "pip1").state == JobState.PENDING_APPROVAL
 
 
-def test_orchestrator_analyst_stage_skips_manual_rows(session):
-    from src.pipeline.orchestrator import process_new_jobs
-
-    session.add(make_job("manual1", JobState.NEW, source="manual"))
-    session.add(make_job("pip1", JobState.NEW))
-    session.commit()
-
-    analyst_mock = MagicMock()
-    analyst_mock.run.return_value = FitScore(
-        score=85, matching_skills=["Python"], missing_skills=[], recommendation="apply"
-    )
-
-    process_new_jobs(session, {"analyst": {"min_fit_score": 70}}, analyst_mock)
-
-    assert analyst_mock.run.call_count == 1
-    assert session.get(Job, "manual1").state == JobState.NEW
-    assert session.get(Job, "pip1").state == JobState.ANALYZED
-
-
-def test_orchestrator_retries_skip_manual_rows(session):
-    from src.pipeline.orchestrator import process_retries
-
-    session.add(make_job("manual1", JobState.FAILED, source="manual"))
-    session.add(make_job("pip1", JobState.FAILED))
-    session.commit()
-    _seed_error(session, "manual1")
-    _seed_error(session, "pip1")
-
-    process_retries(session)
-
-    assert session.get(Job, "manual1").state == JobState.FAILED
-    assert session.get(Job, "pip1").state == JobState.PENDING_APPROVAL
-
-
 def test_requeue_failed_job_refuses_manual(session):
     job = make_job("manual1", JobState.FAILED, source="manual")
     session.add(job)

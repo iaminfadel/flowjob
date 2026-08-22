@@ -1,8 +1,12 @@
+"""Edge-case stage transitions through the PipelineCycleEngine interface."""
+
 import pytest
+from unittest.mock import MagicMock
 from sqlmodel import Session, SQLModel, create_engine
-from unittest.mock import patch, MagicMock
 from src.db.models import Job, JobState
-from src.pipeline.orchestrator import run_pipeline
+from src.pipeline.engine import PipelineCycleEngine
+from src.storage.document_store import InMemoryDocumentStore
+
 
 class FakeAgent:
     def __init__(self, name, should_fail=False):
@@ -28,6 +32,7 @@ class FakeAgent:
         elif self.name == "applicator":
             return not self.should_fail
 
+
 @pytest.fixture
 def session():
     engine = create_engine("sqlite:///:memory:")
@@ -35,29 +40,20 @@ def session():
     with Session(engine) as session:
         yield session
 
-@patch("src.pipeline.orchestrator.save_draft_json", return_value="fake_resume.json")
-@patch("src.pipeline.orchestrator.load_draft_json", return_value={"basics": {"name": "Test"}})
-@patch("src.pipeline.orchestrator.process_scout")
-@patch("src.pipeline.orchestrator.init_db")
-@patch("src.pipeline.orchestrator.get_session")
-@patch("src.tools.browser.check_session_health", return_value=True)
-@patch("src.pipeline.orchestrator.yaml.safe_load")
-@patch("builtins.open")
-@patch("os.path.exists", return_value=True)
-@patch("src.utils.document_generator.PlaywrightDocumentGenerator")
-@patch("src.utils.resume_parser.parse_master_resume")
-def test_editor_retry_max_retries(
-    mock_parse, mock_docgen, mock_exists, mock_open, mock_yaml, mock_check, mock_get_session, mock_init_db, mock_scout, mock_load_draft, mock_save_draft, session
-):
-    mock_yaml.return_value = {"analyst": {"min_fit_score": 70}, "data": {"db_path": "memory"}}
-    mock_get_session.return_value.__enter__.return_value = session
-    mock_parse.return_value = (MagicMock(), "")
-    
-    mock_generator = MagicMock()
-    mock_generator.generate.return_value = "fake_path.pdf"
-    mock_docgen.return_value = mock_generator
 
-    # Seed job in DRAFTED state
+def make_engine(agents):
+    doc_store = InMemoryDocumentStore()
+    return PipelineCycleEngine(
+        config={"analyst": {"min_fit_score": 70}},
+        agents=agents,
+        doc_store=doc_store,
+        approval_fn=lambda j: True,
+        notify_fn=lambda t, m: None,
+    )
+
+
+def test_editor_retry_max_retries(session):
+    """Editor failure path: ANALYZED with feedback recorded, then EDIT_FAIL."""
     job = Job(id="1", title="SE", company="Co", url="http", location="Remote", posted_date="today", jd_text="test jd", state=JobState.DRAFTED)
     session.add(job)
     session.commit()
@@ -66,82 +62,59 @@ def test_editor_retry_max_retries(
         "analyst": FakeAgent("analyst"),
         "tailor": FakeAgent("tailor"),
         "editor": FakeAgent("editor", should_fail=True),
-        "applicator": FakeAgent("applicator")
+        "applicator": FakeAgent("applicator"),
     }
+    eng = make_engine(agents)
+    eng.doc_store.save_draft("1", {"basics": {"name": "Test"}})
 
-    # Run 1: Editor fails, transitions to ANALYZED, metadata set
-    run_pipeline(agents, dry_run=False)
+    # Run 1: Editor fails -> feedback recorded, back to ANALYZED.
+    # (process_analyzed_jobs runs before process_drafted_jobs in a cycle, so
+    # the re-tailor lands on the NEXT cycle — same as production ordering.)
+    assert eng.process_drafted_jobs(session) is True
     session.refresh(job)
-    assert job.state == JobState.ANALYZED
-    # If job starts DRAFTED, Editor runs -> fails -> ANALYZED.
-    # But process_analyzed_jobs already ran before process_drafted_jobs in the loop!
-    # So it stays ANALYZED until the NEXT run_pipeline!
-
     assert job.state == JobState.ANALYZED
     assert job.tailor_metadata["retries"] == 1
     assert job.tailor_metadata["feedback"] == "fix it"
 
-    # Run 2: Tailor runs -> DRAFTED, Editor runs -> fails -> EDIT_FAIL (max retries reached)
-    run_pipeline(agents, dry_run=False)
+    # Run 2: Tailor runs -> DRAFTED; Editor fails again -> EDIT_FAIL (max retries).
+    assert eng.process_analyzed_jobs(session) is True
+    assert eng.process_drafted_jobs(session) is True
     session.refresh(job)
     assert job.state == JobState.EDIT_FAIL
 
-@patch("src.pipeline.orchestrator.process_scout")
-@patch("src.pipeline.orchestrator.prompt_user_approval")
-@patch("src.pipeline.orchestrator.init_db")
-@patch("src.pipeline.orchestrator.get_session")
-@patch("src.tools.browser.check_session_health", return_value=True)
-@patch("src.pipeline.orchestrator.yaml.safe_load")
-@patch("builtins.open")
-def test_approval_acceptance_invokes_applicator(
-    mock_open, mock_yaml, mock_check, mock_get_session, mock_init_db, mock_prompt, mock_scout, session
-):
-    mock_yaml.return_value = {"analyst": {"min_fit_score": 70}, "data": {"db_path": "memory"}}
-    mock_get_session.return_value.__enter__.return_value = session
-    mock_prompt.return_value = True # Accept!
 
+def test_approval_acceptance_invokes_applicator(session):
     job = Job(id="1", title="SE", company="Co", url="http", location="Remote", posted_date="today", jd_text="test jd", state=JobState.PENDING_APPROVAL)
     session.add(job)
     session.commit()
 
-    agents = {
-        "analyst": FakeAgent("analyst"),
-        "tailor": FakeAgent("tailor"),
-        "editor": FakeAgent("editor"),
-        "applicator": FakeAgent("applicator")
-    }
+    applicator = FakeAgent("applicator")
+    eng = make_engine({"applicator": applicator})
+    assert eng.process_pending_approval_jobs(session) is True
 
-    run_pipeline(agents, dry_run=False)
     session.refresh(job)
     assert job.state == JobState.APPLIED
-    assert agents["applicator"].call_count == 1
+    assert applicator.call_count == 1
 
-@patch("src.pipeline.orchestrator.process_scout")
-@patch("src.pipeline.orchestrator.prompt_user_approval")
-@patch("src.pipeline.orchestrator.init_db")
-@patch("src.pipeline.orchestrator.get_session")
-@patch("src.tools.browser.check_session_health", return_value=True)
-@patch("src.pipeline.orchestrator.yaml.safe_load")
-@patch("builtins.open")
-def test_approval_rejection_transitions_to_skipped(
-    mock_open, mock_yaml, mock_check, mock_get_session, mock_init_db, mock_prompt, mock_scout, session
-):
-    mock_yaml.return_value = {"analyst": {"min_fit_score": 70}, "data": {"db_path": "memory"}}
-    mock_get_session.return_value.__enter__.return_value = session
-    mock_prompt.return_value = False # Reject!
 
+def test_approval_rejection_transitions_to_skipped(session):
     job = Job(id="1", title="SE", company="Co", url="http", location="Remote", posted_date="today", jd_text="test jd", state=JobState.PENDING_APPROVAL)
     session.add(job)
     session.commit()
 
-    agents = {
-        "analyst": FakeAgent("analyst"),
-        "tailor": FakeAgent("tailor"),
-        "editor": FakeAgent("editor"),
-        "applicator": FakeAgent("applicator")
-    }
+    def reject(j):
+        return False
 
-    run_pipeline(agents, dry_run=False)
+    applicator = FakeAgent("applicator")
+    eng = PipelineCycleEngine(
+        config={},
+        agents={"applicator": applicator},
+        doc_store=InMemoryDocumentStore(),
+        approval_fn=reject,
+        notify_fn=lambda t, m: None,
+    )
+    assert eng.process_pending_approval_jobs(session) is True
+
     session.refresh(job)
     assert job.state == JobState.SKIPPED
-    assert agents["applicator"].call_count == 0
+    assert applicator.call_count == 0

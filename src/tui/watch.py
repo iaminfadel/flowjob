@@ -9,7 +9,6 @@ from __future__ import annotations
 
 import random
 import threading
-import time
 
 from textual.message import Message
 
@@ -107,12 +106,10 @@ class WatchManager:
             with acquire_watch_lock():
                 self._set_state("running")
                 while not self._stop.is_set():
-                    counts_before = state_counts()
                     spend_before = spend_summary()["cost_usd"]
-                    t0 = time.monotonic()
                     try:
                         with StdoutCapture(self._pump):
-                            run_pipeline(
+                            summary = run_pipeline(
                                 agents=self._get_agents(),
                                 approval_fn=self.approval.request,
                                 wait_fn=self._wait_fn,
@@ -120,17 +117,16 @@ class WatchManager:
                     except SessionHealthError as exc:
                         self._set_state("error", str(exc))
                         return
-                    duration = time.monotonic() - t0
                     spend_after = spend_summary()["cost_usd"]
-                    counts_after = state_counts()
+                    counts = state_counts()
                     self._set_state("running")
                     self.app.post_message(
                         CycleSummary(
-                            duration_s=duration,
-                            counts=counts_after,
+                            duration_s=summary.duration_s,
+                            counts=counts,
                             spend_delta=spend_after - spend_before,
                             cost=spend_after,
-                            jobs_applied=counts_after.get("APPLIED", 0) - counts_before.get("APPLIED", 0),
+                            jobs_applied=summary.jobs_applied,
                         )
                     )
 

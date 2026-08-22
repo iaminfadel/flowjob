@@ -90,7 +90,8 @@ def run(url: str = typer.Option(None, help="Process a single job URL instead of 
     from src.pipeline.orchestrator import run_pipeline
     typer.echo("🚀 Running FlowJob pipeline...")
     agents = build_agents()
-    run_pipeline(agents=agents, url=url, dry_run=dry_run)
+    summary = run_pipeline(agents=agents, url=url, dry_run=dry_run)
+    typer.echo(f"✅ Cycle done in {summary.duration_s:.1f}s (applied: {summary.jobs_applied}, failed: {summary.jobs_failed}).")
 
 @app.command()
 def watch():

@@ -254,8 +254,11 @@ async def test_watch_start_cycle_and_stop(app, monkeypatch, tmp_path):
     calls = {"n": 0}
 
     def fake_run_pipeline(*, agents, approval_fn, wait_fn=None):
+        from src.pipeline.types import CycleSummaryResult
+
         calls["n"] += 1
         print("fake cycle ran")
+        return CycleSummaryResult(duration_s=1.0)
 
     monkeypatch.setattr("src.pipeline.orchestrator.run_pipeline", fake_run_pipeline)
     monkeypatch.setattr(app, "notify", lambda *a, **k: None)
@@ -287,6 +290,8 @@ async def test_watch_lock_conflict_shows_error(app, monkeypatch):
     from src.pipeline.watch_lock import acquire_watch_lock
 
     def fake_run_pipeline(*, agents, approval_fn, wait_fn=None):
+        from src.pipeline.types import CycleSummaryResult
+
         raise AssertionError("must not run when lock is held")
 
     monkeypatch.setattr("src.pipeline.orchestrator.run_pipeline", fake_run_pipeline)
@@ -297,7 +302,9 @@ async def test_watch_lock_conflict_shows_error(app, monkeypatch):
             await pilot.click("#watch-start")
             await wait_until(
                 pilot,
-                lambda: "Watch: error" in str(app.query_one("#watch-status").content),
+                # str(Static.content) returns the RAW markup ("Watch: [bold red]error[/]");
+                # render() gives the visible text, so assert against that.
+                lambda: "Watch: error" in str(app.query_one("#watch-status").render().plain),
                 what="watch error state from lock conflict",
             )
 
@@ -392,9 +399,12 @@ async def test_watch_pause_blocks_worker_until_continue(app, monkeypatch):
     calls = {"n": 0}
 
     def fake_run_pipeline(*, agents, approval_fn, wait_fn=None):
+        from src.pipeline.types import CycleSummaryResult
+
         calls["n"] += 1
         if calls["n"] == 1:
             wait_fn("Fill the experience field, then click Next")
+        return CycleSummaryResult(duration_s=1.0)
 
     monkeypatch.setattr("src.pipeline.orchestrator.run_pipeline", fake_run_pipeline)
     monkeypatch.setattr(app, "notify", lambda *a, **k: None)
